@@ -1,6 +1,6 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
-import { app, BrowserWindow, Notification, ipcMain, nativeImage } from "electron";
+import { BrowserWindow, Notification, ipcMain, nativeImage } from "electron";
 import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
 
 interface NotificationInput {
