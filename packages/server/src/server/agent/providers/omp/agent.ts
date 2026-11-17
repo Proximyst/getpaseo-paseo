@@ -2,7 +2,9 @@ import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
 import { mapCustomMessageToToolCall } from "../custom-message.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
@@ -2523,6 +2525,10 @@ export class OmpAgentClient implements AgentClient {
     context?: ProviderRefreshContext,
   ): Promise<ProviderCatalog> {
     const launchMode = this.resolveLaunchMode(undefined, options.providerOptions);
+    const cwd =
+      options.scope === "global"
+        ? await mkdtemp(join(tmpdir(), "paseo-omp-catalog-"))
+        : options.cwd;
     let runtimeSession: OmpRuntimeSession | undefined;
     let closePromise: Promise<void> | undefined;
     const closeSession = () => {
@@ -2535,7 +2541,7 @@ export class OmpAgentClient implements AgentClient {
     try {
       await runProviderRefreshActivity(context, "runtime.start", async () => {
         runtimeSession = await this.resolveRuntime(options.providerOptions).startSession({
-          cwd: options.scope === "global" ? homedir() : options.cwd,
+          cwd,
           protocolMode: "rpc-ui",
           modeId: launchMode.modeId,
           extraArgs: launchMode.extraArgs,
@@ -2553,7 +2559,13 @@ export class OmpAgentClient implements AgentClient {
       return { models, modes: [...OMP_MODES] };
     } finally {
       context?.signal.removeEventListener("abort", handleAbort);
-      await closeSession();
+      try {
+        await closeSession();
+      } finally {
+        if (options.scope === "global") {
+          await rm(cwd, { recursive: true, force: true });
+        }
+      }
     }
   }
 

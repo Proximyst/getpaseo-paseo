@@ -218,6 +218,9 @@ target can share its result. Runtime-aware adapters must use that target for bot
 resolution. An explicit home-directory workspace is distinct from a semantic global request.
 Plugin callbacks follow the same contract; see [plugin providers](plugins.md#contribute-a-provider).
 
+OMP runs global catalog probes in a fresh temporary directory so sandbox wrappers do not need to
+grant access to the home directory as a workspace. Workspace probes still use the requested cwd.
+
 `ProviderSnapshotManager` owns one refresh deadline per provider. The deadline starts before the
 availability check and covers that check plus the complete catalog probe. Providers that make
 multiple catalog requests must not apply this deadline separately to each request. The manager
