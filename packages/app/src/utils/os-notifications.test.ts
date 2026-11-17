@@ -50,6 +50,9 @@ async function loadModuleForPlatform(
   vi.doMock("@/desktop/host", () => ({
     getDesktopHost: () => options?.desktopHost ?? null,
   }));
+  vi.doMock("@/hooks/use-settings", () => ({
+    loadAppSettingsFromStorage: async () => ({ notificationsEnabled: true }),
+  }));
   vi.doMock("expo-asset", () => ({
     Asset: {
       fromModule: vi.fn(() => ({
@@ -95,6 +98,7 @@ describe("sendOsNotification", () => {
 
   afterEach(() => {
     vi.doUnmock("react-native");
+    vi.doUnmock("@/hooks/use-settings");
     vi.restoreAllMocks();
     vi.resetModules();
     restoreGlobals();

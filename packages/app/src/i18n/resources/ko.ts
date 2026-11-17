@@ -2342,6 +2342,17 @@ export const ko: TranslationResources = {
     },
     notifications: {
       title: "알림",
+      enabled: "알림이 활성화됨",
+      disabled: "알림이 비활성화됨",
+      enabledHint: "이 Paseo 설치의 알림을 제어합니다.",
+      disable: "알림 비활성화",
+      enable: "알림 활성화",
+      saveFailed: "알림 설정을 변경하지 못했습니다. 다시 시도해 주세요.",
+      systemSettings: "시스템 알림 권한",
+      nativeDisableHint:
+        "모든 알림을 즉시 차단하려면 시스템 설정에서 Paseo의 알림 권한을 끄세요. 오프라인 또는 이전 버전의 호스트와 이미 전송된 알림은 계속 도착할 수 있습니다. 알림을 다시 활성화할 때 해당 설정에서 권한도 복원하세요.",
+      openSettings: "시스템 설정 열기",
+      openSettingsFailed: "시스템 설정을 열지 못했습니다.",
       permission: "알림 권한",
       refreshAccessibility: "알림 권한 새로 고침",
       playSound: "소리 재생",

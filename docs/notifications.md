@@ -15,6 +15,19 @@ See [agent targets and deferred opens](expo-router.md#agent-targets) for route
 ownership and workspace recovery. Notification generation, presence, and push
 eligibility remain daemon concerns.
 
+## Disabling notifications
+
+Use the Notifications section in Settings to disable delivery for this app
+installation. This is separate from the desktop sound preference and OS
+notification permission.
+
+On native devices, disabling also unregisters push delivery from connected hosts
+that support token revocation. Disconnected hosts receive the revocation when
+they reconnect. Use the device notification settings to revoke OS permission
+when you need to block notifications immediately, including pushes already in
+flight or sent by unreachable or older hosts. The app cannot revoke that
+permission itself; restore it there if you later re-enable notifications.
+
 ## Native delivery
 
 Keep the router instance at module scope. Android's `singleTask` Activity can
@@ -50,8 +63,9 @@ read by Expo arrives under `userInfo.body`; simulator payloads must match:
 An Android FCM launch intent needs `google.message_id` and a JSON `body` extra.
 An arbitrary Activity launch with data extras does not exercise Expo's FCM path.
 
-Foreground pushes remain in Notification Center without a banner or sound.
-This preserves notifications sent with stale presence information.
+When notifications are enabled, foreground pushes remain in Notification Center
+without a banner or sound. This preserves notifications sent with stale presence
+information.
 
 ## Startup and verification
 
