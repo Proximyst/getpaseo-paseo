@@ -372,10 +372,15 @@ export async function saveAppSettings(input: {
   updates: AppSettingsUpdate;
   deps: SettingsDeps;
 }): Promise<void> {
+  const stored = await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY);
   const storedCurrent =
     input.queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY) ??
     (await loadAppSettingsFromStorage(input.deps));
   const current = normalizeAppSettings(storedCurrent);
+  // Another window may have changed notification delivery since this cache was loaded.
+  if (stored) {
+    current.notificationsEnabled = stored.notificationsEnabled;
+  }
   const updates = typeof input.updates === "function" ? input.updates(current) : input.updates;
   const next = { ...current, ...updates };
   // Notification delivery reads durable storage, so publish this preference only after saving.
@@ -385,8 +390,7 @@ export async function saveAppSettings(input: {
   }
   await writeAppSettings(
     input.deps.storage,
-    (await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY)) ??
-      StoredAppSettingsSchema.parse({}),
+    stored ?? StoredAppSettingsSchema.parse({}),
     next,
   );
   if (changesNotifications) {
