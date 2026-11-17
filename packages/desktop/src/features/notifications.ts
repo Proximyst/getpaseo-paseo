@@ -62,22 +62,6 @@ function focusSenderWindow(sender: Electron.WebContents): BrowserWindow | null {
   return win;
 }
 
-/**
- * macOS requires a notification to have been shown at least once before
- * the app appears in System Preferences > Notifications. We fire a
- * silent no-op notification during startup to ensure registration.
- */
-export function ensureNotificationCenterRegistration(): void {
-  if (process.platform !== "darwin" || !Notification.isSupported()) {
-    return;
-  }
-
-  const probe = new Notification({ title: app.name, silent: true });
-  probe.on("show", () => probe.close());
-  setTimeout(() => probe.close(), 2_000);
-  probe.show();
-}
-
 export function registerNotificationHandlers(): void {
   ipcMain.handle("paseo:notification:isSupported", () => {
     return Notification.isSupported();

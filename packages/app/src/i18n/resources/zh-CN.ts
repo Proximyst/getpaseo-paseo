@@ -2308,6 +2308,17 @@ export const zhCN: TranslationResources = {
     },
     notifications: {
       title: "通知",
+      enabled: "通知已启用",
+      disabled: "通知已禁用",
+      enabledHint: "控制此 Paseo 安装实例的通知。",
+      disable: "禁用通知",
+      enable: "启用通知",
+      saveFailed: "无法更改通知设置。请重试。",
+      systemSettings: "系统通知权限",
+      nativeDisableHint:
+        "如需立即彻底屏蔽所有通知，请在系统设置中关闭 Paseo 的通知权限。离线或旧版主机以及已发送的通知仍可能送达。重新启用通知时，请在系统设置中恢复权限。",
+      openSettings: "打开系统设置",
+      openSettingsFailed: "无法打开系统设置。",
       permission: "通知权限",
       refreshAccessibility: "刷新通知权限",
       playSound: "播放声音",
