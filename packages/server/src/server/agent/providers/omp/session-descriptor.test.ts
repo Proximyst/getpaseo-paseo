@@ -4,6 +4,12 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import {
+  assertOmpInteractiveSessionFile,
+  isOmpAdvisorSessionFile,
+  OmpAdvisorSessionError,
+} from "./advisor-session.js";
+
+import {
   listOmpImportableSessions,
   readOmpImportSessionConfig,
   resolveOmpSessionFile,
@@ -17,6 +23,86 @@ async function writeSession(root: string, relativePath: string, lines: unknown[]
 }
 
 describe("OMP session descriptor", () => {
+  test("recognizes only reserved advisor transcript filenames across path separators", () => {
+    for (const file of [
+      "__advisor.jsonl",
+      "/sessions/parent/__advisor.primary-advisor.jsonl",
+      "C:\\sessions\\parent\\Task\\__advisor.correctness.jsonl",
+    ]) {
+      expect(isOmpAdvisorSessionFile(file)).toBe(true);
+      expect(() => assertOmpInteractiveSessionFile(file)).toThrow(OmpAdvisorSessionError);
+    }
+    for (const file of [
+      "/sessions/parent.jsonl",
+      "/sessions/__advisor.jsonl/Task.jsonl",
+      "/sessions/__advisor-1.jsonl",
+      "/sessions/prefix__advisor.correctness.jsonl",
+      "/sessions/__advisor.correctness.jsonl.backup",
+      "/sessions/__Advisor.jsonl",
+    ]) {
+      expect(isOmpAdvisorSessionFile(file)).toBe(false);
+    }
+  });
+
+  test("excludes advisors before candidate limits while retaining parent and task sessions", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-advisors-"));
+    const cwd = path.join(root, "repo");
+    const parent = await writeSession(root, "project/parent.jsonl", [
+      { type: "session", id: "parent", timestamp: "2026-06-08T00:00:00.000Z", cwd },
+      { type: "custom", customType: "advisor", data: { enabled: true } },
+    ]);
+    const child = await writeSession(root, "project/parent/Task.jsonl", [
+      { type: "session", id: "task", timestamp: "2026-06-09T00:00:00.000Z", cwd },
+    ]);
+    await utimes(parent, new Date("2026-06-08"), new Date("2026-06-08"));
+    await utimes(child, new Date("2026-06-09"), new Date("2026-06-09"));
+    for (const [index, name] of [
+      "project/parent/__advisor.jsonl",
+      "project/parent/__advisor.primary-advisor.jsonl",
+      "project/parent/Task/__advisor.correctness.jsonl",
+    ].entries()) {
+      const advisor = await writeSession(root, name, [
+        { type: "session", id: `advisor-${index}`, timestamp: "2026-06-10T00:00:00.000Z", cwd },
+      ]);
+      await utimes(advisor, new Date("2026-06-10"), new Date("2026-06-10"));
+    }
+
+    const sessions = await listOmpImportableSessions({
+      sessionDir: path.join(root, "sessions"),
+      limit: 2,
+      scanLimit: 2,
+    });
+    expect(sessions.map((session) => session.providerHandleId)).toEqual([child, parent]);
+    await expect(
+      readOmpImportSessionConfig(parent, { sessionDir: path.join(root, "sessions") }),
+    ).resolves.toEqual({});
+    await expect(
+      readOmpImportSessionConfig("task", { sessionDir: path.join(root, "sessions") }),
+    ).resolves.toEqual({});
+  });
+
+  test("rejects advisor imports by direct path and bare session id", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-advisor-import-"));
+    const sessionDir = path.join(root, "sessions");
+    for (const [index, name] of [
+      "project/parent/__advisor.jsonl",
+      "project/parent/__advisor.primary-advisor.jsonl",
+      "project/parent/Task/__advisor.correctness.jsonl",
+    ].entries()) {
+      const id = `advisor-${index}`;
+      const file = await writeSession(root, name, [
+        { type: "session", id, timestamp: "2026-06-10T00:00:00.000Z", cwd: root },
+        { type: "model_change", model: "anthropic/claude-opus-5" },
+      ]);
+      await expect(readOmpImportSessionConfig(file, { sessionDir })).rejects.toThrow(
+        OmpAdvisorSessionError,
+      );
+      await expect(readOmpImportSessionConfig(id, { sessionDir })).rejects.toThrow(
+        OmpAdvisorSessionError,
+      );
+    }
+  });
+
   test("cwd filtering continues past the global candidate overscan", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-cwd-limit-"));
     const sessionsDir = path.join(root, "sessions");
