@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AttemptCancelledError, AttemptGuard } from "@/utils/attempt-guard";
 import { isElectronRuntime } from "@/desktop/host";
+import {
+  isMicrophoneEnabled,
+  requireMicrophoneEnabled,
+  subscribeMicrophoneDisabled,
+} from "@/audio/microphone-policy";
 
 export interface AudioCaptureConfig {
   sampleRate?: number;
@@ -114,9 +119,17 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
   }, []);
 
   const hardReset = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    mediaRecorderRef.current = null;
+    if (recorder && recorder.state !== "inactive") {
+      try {
+        recorder.stop();
+      } catch {
+        // Tracks are still released if stopping the recorder fails.
+      }
+    }
     stopMetering();
     cleanupStream();
-    mediaRecorderRef.current = null;
     chunksRef.current = [];
     setIsRecording(false);
   }, [cleanupStream, stopMetering]);
@@ -152,6 +165,7 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
       const dataArray = new Uint8Array(analyser.fftSize);
 
       const tick = () => {
+        if (!isMicrophoneEnabled() || analyserRef.current !== analyser) return;
         analyser.getByteTimeDomainData(dataArray);
         let sumSquares = 0;
         for (let i = 0; i < dataArray.length; i++) {
@@ -177,6 +191,8 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
       throw new Error("Already recording");
     }
 
+    await requireMicrophoneEnabled();
+    attemptGuardRef.current.assertCurrent(attemptId);
     assertMicrophoneEnvironment();
 
     const options = configRef.current;
@@ -244,6 +260,7 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
     chunksRef.current = [];
 
     recorder.ondataavailable = (event) => {
+      if (!isMicrophoneEnabled() || mediaRecorderRef.current !== recorder) return;
       if (event.data && event.data.size > 0) {
         chunksRef.current.push(event.data);
         if (options?.enableContinuousRecording && options?.onSpeechSegment) {
@@ -260,6 +277,10 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
     const timeslice = options?.enableContinuousRecording ? 1000 : undefined;
 
     startMetering(stream);
+    if (!attemptGuardRef.current.isCurrent(attemptId) || !isMicrophoneEnabled()) {
+      hardReset();
+      throw new AttemptCancelledError();
+    }
     setIsRecording(true);
 
     if (timeslice !== undefined) {
@@ -267,7 +288,7 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
     } else {
       recorder.start();
     }
-  }, [cleanupStream, detectSupportedMimeType, startMetering]);
+  }, [cleanupStream, detectSupportedMimeType, hardReset, startMetering]);
 
   const stop = useCallback(async (): Promise<Blob> => {
     attemptGuardRef.current.cancel();
@@ -337,15 +358,14 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
 
   useEffect(() => {
     const attemptGuard = attemptGuardRef.current;
-    const mediaRecorder = mediaRecorderRef;
-    return () => {
+    const reset = () => {
       attemptGuard.cancel();
-      try {
-        mediaRecorder.current?.stop();
-      } catch {
-        // Ignore stop during unmount.
-      }
       hardReset();
+    };
+    const unsubscribeMicrophoneDisabled = subscribeMicrophoneDisabled(reset);
+    return () => {
+      unsubscribeMicrophoneDisabled();
+      reset();
     };
   }, [hardReset]);
 

@@ -80,6 +80,7 @@ export interface AppSettings {
   /** Which contributed theme `theme: "plugin"` selects. */
   pluginThemeId: string | null;
   language: AppLanguage;
+  microphoneEnabled: boolean;
   notificationsEnabled: boolean;
   sendBehavior: SendBehavior;
   serviceUrlBehavior: ServiceUrlBehavior;
@@ -144,6 +145,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   theme: DEFAULT_THEME_PREFERENCE,
   pluginThemeId: null,
   language: "system",
+  microphoneEnabled: true,
   notificationsEnabled: true,
   sendBehavior: "steer",
   serviceUrlBehavior: "ask",
@@ -226,6 +228,7 @@ const StoredAppSettingsSchema = z
     language: z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
+    microphoneEnabled: z.boolean().catch(true),
     notificationsEnabled: z.boolean().catch(true),
     sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),

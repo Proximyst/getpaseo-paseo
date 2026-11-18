@@ -1583,6 +1583,7 @@ export const en = {
         unexpectedState: "Unexpected notification permission state: {{state}}",
       },
       microphone: {
+        disabled: "Microphone access is turned off in app settings.",
         webOnly: "Desktop microphone status is only available on web runtime.",
         navigatorUnavailable: "Navigator is unavailable in this environment.",
         granted: "Microphone access is granted.",
@@ -2580,6 +2581,10 @@ export const en = {
     general: {
       title: "General",
       sending: "Sending",
+      microphone: {
+        label: "Microphone",
+        description: "Allow microphone access for dictation and voice mode",
+      },
       setup: {
         label: "First-run setup",
         description: "Walk through appearance, providers, projects and phone pairing again",

@@ -1573,6 +1573,7 @@ export const ja: TranslationResources = {
         unexpectedState: "予期しない通知の権限状態: {{state}}",
       },
       microphone: {
+        disabled: "アプリの設定でマイクへのアクセスがオフになっています。",
         webOnly: "デスクトップマイクのステータスはWebランタイムでのみ利用できます。",
         navigatorUnavailable: "この環境ではNavigatorは利用できません。",
         granted: "マイクへのアクセスが許可されています。",
@@ -2472,6 +2473,10 @@ export const ja: TranslationResources = {
     general: {
       title: "一般",
       sending: "送信",
+      microphone: {
+        label: "マイク",
+        description: "音声入力と音声モードでマイクの使用を許可する",
+      },
       setup: {
         label: "初回セットアップ",
         description:

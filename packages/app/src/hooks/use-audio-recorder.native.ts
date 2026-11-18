@@ -9,6 +9,11 @@ import {
 import { Paths, File, Directory, FileInfo } from "expo-file-system";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { AttemptCancelledError, AttemptGuard } from "@/utils/attempt-guard";
+import {
+  isMicrophoneEnabled,
+  requireMicrophoneEnabled,
+  subscribeMicrophoneDisabled,
+} from "@/audio/microphone-policy";
 
 export interface AudioCaptureConfig {
   sampleRate?: number;
@@ -94,6 +99,7 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
   const [recordingStartTime, setRecordingStartTime] = useState<Date | null>(null);
   const attemptGuardRef = useRef(new AttemptGuard());
   const startStopMutexRef = useRef<Promise<unknown> | null>(null);
+  const startPromiseRef = useRef<Promise<void> | null>(null);
 
   // Store config callbacks in refs so they can update without recreating the recorder
   const configRef = useRef(config);
@@ -150,6 +156,7 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
     }
 
     const interval = setInterval(() => {
+      if (!isMicrophoneEnabled() || !recorderRef.current.isRecording) return;
       const metering = recorderState.metering;
       if (metering !== undefined && metering !== null) {
         const normalized = Math.max(0, Math.min(1, (metering + 40) / 40));
@@ -161,54 +168,59 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
   }, [recorderState.metering, recorderState.isRecording]);
 
   const start = useCallback(async (): Promise<void> => {
-    const recorder = recorderRef.current;
-
-    // Use expo's isRecording as single source of truth
-    if (recorder.isRecording) {
-      throw new Error("Already recording");
-    }
-
-    try {
-      const attemptId = attemptGuardRef.current.next();
+    const attemptId = attemptGuardRef.current.next();
+    const previousStart = startPromiseRef.current;
+    const pending = (async () => {
+      await previousStart?.catch(() => undefined);
+      await startStopMutexRef.current?.catch(() => undefined);
       attemptGuardRef.current.assertCurrent(attemptId);
-
-      // Request microphone permissions
-      const permissionResponse = await requestRecordingPermissionsAsync();
+      await requireMicrophoneEnabled();
       attemptGuardRef.current.assertCurrent(attemptId);
-
-      if (!permissionResponse.granted) {
-        throw new Error(
-          "Microphone permission denied. Please enable microphone access in your device settings.",
-        );
+      const recorder = recorderRef.current;
+      if (recorder.isRecording) {
+        throw new Error("Already recording");
       }
 
-      // Configure audio mode for recording
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        allowsRecording: true,
-      });
-      attemptGuardRef.current.assertCurrent(attemptId);
+      try {
+        const permissionResponse = await requestRecordingPermissionsAsync();
+        attemptGuardRef.current.assertCurrent(attemptId);
+        if (!permissionResponse.granted) {
+          throw new Error(
+            "Microphone permission denied. Please enable microphone access in your device settings.",
+          );
+        }
 
-      const startTime = new Date();
-      setRecordingStartTime(startTime);
-      attemptGuardRef.current.assertCurrent(attemptId);
-
-      // Prepare the recorder before recording (required step)
-      await recorder.prepareToRecordAsync();
-      attemptGuardRef.current.assertCurrent(attemptId);
-
-      recorder.record();
-      attemptGuardRef.current.assertCurrent(attemptId);
-    } catch (error) {
-      setRecordingStartTime(null);
-      if (error instanceof AttemptCancelledError) {
-        return;
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      if (message !== "Recording cancelled") {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: true,
+        });
+        attemptGuardRef.current.assertCurrent(attemptId);
+        await recorder.prepareToRecordAsync();
+        attemptGuardRef.current.assertCurrent(attemptId);
+        if (!isMicrophoneEnabled()) {
+          throw new AttemptCancelledError();
+        }
+        setRecordingStartTime(new Date());
+        recorder.record();
+      } catch (error) {
+        // Preparation can acquire the microphone before record() is called.
+        // Release it even when a disabled start finishes preparing late.
+        await recorder.stop().catch(() => undefined);
+        await setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+        setRecordingStartTime(null);
+        if (error instanceof AttemptCancelledError) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
         console.error("[AudioRecorder] Failed to start recording:", error);
+        throw new Error(`Failed to start audio recording: ${message}`, { cause: error });
       }
-      throw new Error(`Failed to start audio recording: ${message}`, { cause: error });
+    })();
+    startPromiseRef.current = pending;
+    try {
+      await pending;
+    } finally {
+      if (startPromiseRef.current === pending) startPromiseRef.current = null;
     }
   }, []);
 
@@ -217,6 +229,7 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
 
     // Cancel any in-flight start attempt and serialize stop/cleanup.
     attemptGuardRef.current.cancel();
+    await startPromiseRef.current?.catch(() => undefined);
     if (startStopMutexRef.current) {
       await startStopMutexRef.current.catch(() => undefined);
     }
@@ -280,6 +293,25 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
       startStopMutexRef.current = null;
     }
   }, [recordingStartTime]);
+
+  useEffect(() => {
+    const cancelCapture = () => {
+      attemptGuardRef.current.cancel();
+      setRecordingStartTime(null);
+      const recorder = recorderRef.current;
+      const pending = recorder.stop().catch(() => undefined);
+      startStopMutexRef.current = pending;
+      void pending.finally(() => {
+        if (startStopMutexRef.current === pending) startStopMutexRef.current = null;
+      });
+      void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+    };
+    const unsubscribeMicrophoneDisabled = subscribeMicrophoneDisabled(cancelCapture);
+    return () => {
+      unsubscribeMicrophoneDisabled();
+      cancelCapture();
+    };
+  }, []);
 
   const getSupportedMimeType = useCallback((): string | null => {
     // On native platforms, expo-audio uses m4a/AAC

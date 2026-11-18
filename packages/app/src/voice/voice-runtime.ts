@@ -4,6 +4,12 @@ import { resolveVoiceUnavailableMessage } from "@/utils/server-info-capabilities
 import type { DaemonServerInfo } from "@/stores/session-store";
 import type { AudioEngine } from "@/audio";
 import {
+  isMicrophoneEnabled,
+  requireMicrophoneEnabled,
+  subscribeMicrophoneDisabled,
+} from "@/audio/microphone-policy";
+import { AttemptCancelledError } from "@/utils/attempt-guard";
+import {
   THINKING_TONE_NATIVE_PCM_BASE64,
   THINKING_TONE_NATIVE_PCM_DURATION_MS,
 } from "@/utils/thinking-tone.native-pcm";
@@ -189,6 +195,19 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
   const listeners = new Set<() => void>();
   const telemetryListeners = new Set<() => void>();
   const sessions = new Map<string, RuntimeSessionState>();
+  let transition: Promise<void> = Promise.resolve();
+
+  function enqueueTransition(operation: () => Promise<void>): Promise<void> {
+    const pending = transition.then(operation);
+    transition = pending.catch(() => undefined);
+    return pending;
+  }
+
+  function assertCurrentGeneration(generation: number): void {
+    if (state.generation !== generation || !isMicrophoneEnabled()) {
+      throw new AttemptCancelledError();
+    }
+  }
   const state: RuntimeState = {
     snapshot: INITIAL_SNAPSHOT,
     telemetry: INITIAL_TELEMETRY,
@@ -555,26 +574,35 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
   }
 
   async function resyncVoiceMode(serverId: string): Promise<void> {
-    if (
-      !state.snapshot.isVoiceMode ||
-      state.snapshot.activeServerId !== serverId ||
-      !state.snapshot.activeAgentId
-    ) {
-      return;
-    }
+    const generation = state.generation;
+    await enqueueTransition(async () => {
+      if (
+        !isMicrophoneEnabled() ||
+        state.generation !== generation ||
+        !state.snapshot.isVoiceMode ||
+        state.snapshot.activeServerId !== serverId ||
+        !state.snapshot.activeAgentId
+      ) {
+        return;
+      }
 
-    const activeSession = getActiveSession();
-    if (!activeSession || !activeSession.connected) {
-      return;
-    }
+      const activeSession = getActiveSession();
+      if (!activeSession || !activeSession.connected) {
+        return;
+      }
 
-    patchSnapshot((prev) => ({ ...prev, isVoiceSwitching: true }));
-    try {
-      await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId);
-      state.transportReady = true;
-    } finally {
-      patchSnapshot((prev) => ({ ...prev, isVoiceSwitching: false }));
-    }
+      patchSnapshot((prev) => ({ ...prev, isVoiceSwitching: true }));
+      try {
+        await activeSession.adapter.setVoiceMode(true, state.snapshot.activeAgentId);
+        if (state.generation === generation && isMicrophoneEnabled()) {
+          state.transportReady = true;
+        }
+      } finally {
+        if (state.generation === generation) {
+          patchSnapshot((prev) => ({ ...prev, isVoiceSwitching: false }));
+        }
+      }
+    });
   }
 
   const api: VoiceRuntime = {
@@ -632,7 +660,7 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     },
 
     handleCapturePcm(chunk) {
-      if (!state.snapshot.isVoiceMode || state.snapshot.isMuted) {
+      if (!isMicrophoneEnabled() || !state.snapshot.isVoiceMode || state.snapshot.isMuted) {
         return;
       }
       uploader.pushPcmChunk(chunk);
@@ -704,113 +732,132 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     },
 
     async startVoice(serverId, agentId) {
-      const session = sessions.get(serverId);
-      if (!session) {
-        throw new Error(`Voice runtime is not ready for host ${serverId}`);
-      }
-      if (!session.connected) {
-        throw new Error(`Host ${serverId} is not connected`);
-      }
-
-      const serverInfo = deps.getServerInfo(serverId);
-      const unavailableMessage = resolveVoiceUnavailableMessage({
-        serverInfo,
-        mode: "voice",
-      });
-      if (unavailableMessage) {
-        throw new Error(unavailableMessage);
-      }
-
-      const previousServerId = state.snapshot.activeServerId;
-      const previousAgentId = state.snapshot.activeAgentId;
-      const generation = state.generation + 1;
-      let enabledCurrentVoiceMode = false;
-      state.generation = generation;
-      state.transportReady = false;
-      patchSnapshot((prev) => ({
-        ...prev,
-        isVoiceSwitching: true,
-        phase: "starting",
-        activeServerId: serverId,
-        activeAgentId: agentId,
-      }));
-
-      try {
-        if (
-          state.snapshot.isVoiceMode &&
-          previousServerId &&
-          (previousServerId !== serverId || previousAgentId !== agentId)
-        ) {
-          const previousSession = sessions.get(previousServerId);
-          if (previousSession) {
-            previousSession.adapter.setAssistantAudioPlaying(false);
-            await previousSession.adapter.setVoiceMode(false);
-          }
-        }
-
-        await deps.activateKeepAwake(KEEP_AWAKE_TAG).catch((error) => {
-          console.warn("[VoiceRuntime] Failed to activate keep-awake:", error);
-        });
-
-        await deps.engine.initialize();
-        await session.adapter.setVoiceMode(true, agentId);
-        enabledCurrentVoiceMode = true;
-        await deps.engine.startCapture();
+      const generation = ++state.generation;
+      await enqueueTransition(async () => {
         if (state.generation !== generation) {
           return;
         }
+        try {
+          await requireMicrophoneEnabled();
+        } catch (error) {
+          if (state.generation !== generation) {
+            return;
+          }
+          throw error;
+        }
+        if (state.generation !== generation) {
+          return;
+        }
+        const session = sessions.get(serverId);
+        if (!session) {
+          throw new Error(`Voice runtime is not ready for host ${serverId}`);
+        }
+        if (!session.connected) {
+          throw new Error(`Host ${serverId} is not connected`);
+        }
 
-        state.transportReady = true;
-        state.turnInProgress = false;
-        uploader.reset();
-        resetCaptureTelemetry();
+        const unavailableMessage = resolveVoiceUnavailableMessage({
+          serverInfo: deps.getServerInfo(serverId),
+          mode: "voice",
+        });
+        if (unavailableMessage) {
+          throw new Error(unavailableMessage);
+        }
+
+        const previousServerId = state.snapshot.activeServerId;
+        const previousAgentId = state.snapshot.activeAgentId;
+        let enabledCurrentVoiceMode = false;
+        state.transportReady = false;
         patchSnapshot((prev) => ({
           ...prev,
-          isVoiceMode: true,
-          isVoiceSwitching: false,
-          phase: "listening",
-          isMuted: deps.engine.isMuted(),
+          isVoiceSwitching: true,
+          phase: "starting",
+          activeServerId: serverId,
+          activeAgentId: agentId,
         }));
-      } catch (error) {
-        if (enabledCurrentVoiceMode) {
-          await session.adapter.setVoiceMode(false).catch(() => undefined);
+
+        try {
+          assertCurrentGeneration(generation);
+          if (
+            state.snapshot.isVoiceMode &&
+            previousServerId &&
+            (previousServerId !== serverId || previousAgentId !== agentId)
+          ) {
+            const previousSession = sessions.get(previousServerId);
+            if (previousSession) {
+              previousSession.adapter.setAssistantAudioPlaying(false);
+              await previousSession.adapter.setVoiceMode(false);
+              assertCurrentGeneration(generation);
+            }
+          }
+
+          await deps.activateKeepAwake(KEEP_AWAKE_TAG).catch((error) => {
+            console.warn("[VoiceRuntime] Failed to activate keep-awake:", error);
+          });
+          assertCurrentGeneration(generation);
+          await deps.engine.initialize();
+          assertCurrentGeneration(generation);
+          await session.adapter.setVoiceMode(true, agentId);
+          enabledCurrentVoiceMode = true;
+          assertCurrentGeneration(generation);
+          await deps.engine.startCapture();
+          assertCurrentGeneration(generation);
+
+          state.transportReady = true;
+          state.turnInProgress = false;
+          uploader.reset();
+          resetCaptureTelemetry();
+          patchSnapshot((prev) => ({
+            ...prev,
+            isVoiceMode: true,
+            isVoiceSwitching: false,
+            phase: "listening",
+            isMuted: deps.engine.isMuted(),
+          }));
+        } catch (error) {
+          if (enabledCurrentVoiceMode) {
+            await session.adapter.setVoiceMode(false).catch(() => undefined);
+          }
+          await performLocalStop();
+          if (!(error instanceof AttemptCancelledError)) {
+            throw error;
+          }
         }
-        await performLocalStop();
-        throw error;
-      }
+      });
     },
 
     async stopVoice() {
+      ++state.generation;
       const activeSession = getActiveSession();
-      const generation = state.generation + 1;
-      state.generation = generation;
+      state.transportReady = false;
+      stopCue();
+      uploader.reset();
+      resetPlaybackState();
+      deps.engine.stop();
+      deps.engine.clearQueue();
+      resetCaptureTelemetry();
       patchSnapshot((prev) => ({
         ...prev,
+        isVoiceMode: false,
         isVoiceSwitching: true,
         phase: "stopping",
       }));
-
-      try {
-        stopCue();
-        uploader.reset();
-        state.transportReady = false;
-        resetPlaybackState();
-        deps.engine.stop();
-        deps.engine.clearQueue();
-        activeSession?.adapter.setAssistantAudioPlaying(false);
-        if (activeSession) {
-          await activeSession.adapter.setVoiceMode(false);
+      // Capture must stop without waiting for an in-flight server request.
+      const captureStopped = deps.engine.stopCapture().catch(() => undefined);
+      await enqueueTransition(async () => {
+        try {
+          await captureStopped;
+          if (activeSession) {
+            await activeSession.adapter.setVoiceMode(false);
+          }
+        } finally {
+          await performLocalStop();
         }
-        await deps.engine.stopCapture();
-        await deps.deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => undefined);
-      } finally {
-        if (state.generation === generation) {
-          resetToDisabledState();
-        }
-      }
+      });
     },
 
     async destroy() {
+      unsubscribeMicrophoneDisabled();
       await this.stopVoice().catch(() => undefined);
       await deps.engine.destroy();
       listeners.clear();
@@ -819,6 +866,9 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
     },
 
     toggleMute() {
+      if (!isMicrophoneEnabled() || !state.snapshot.isVoiceMode) {
+        return;
+      }
       const nextMuted = deps.engine.toggleMute();
       if (nextMuted) {
         uploader.reset();
@@ -948,6 +998,16 @@ export function createVoiceRuntime(deps: VoiceRuntimeDeps): VoiceRuntime {
       stopCue();
     },
   };
+
+  const unsubscribeMicrophoneDisabled = subscribeMicrophoneDisabled(() => {
+    ++state.generation;
+    if (state.snapshot.phase === "disabled") {
+      return;
+    }
+    void api.stopVoice().catch((error) => {
+      console.error("[VoiceRuntime] Failed to stop after microphone was disabled:", error);
+    });
+  });
 
   return api;
 }

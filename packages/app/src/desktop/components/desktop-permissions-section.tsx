@@ -8,6 +8,7 @@ import { DesktopPermissionRow } from "@/desktop/components/desktop-permission-ro
 import { useDesktopPermissions } from "@/desktop/permissions/use-desktop-permissions";
 import { settingsStyles } from "@/styles/settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { useAppSettings } from "@/hooks/use-settings";
 
 const ThemedRotateCw = withUnistyles(RotateCw, (theme) => ({
   size: theme.iconSize.md,
@@ -16,6 +17,7 @@ const ThemedRotateCw = withUnistyles(RotateCw, (theme) => ({
 
 export function DesktopPermissionsSection() {
   const { t } = useTranslation();
+  const { settings, isLoading } = useAppSettings();
   const {
     isDesktopApp,
     snapshot,
@@ -61,7 +63,7 @@ export function DesktopPermissionsSection() {
     [t],
   );
 
-  if (!isDesktopApp) {
+  if (!isDesktopApp || isLoading || !settings.microphoneEnabled) {
     return null;
   }
 
