@@ -140,7 +140,8 @@ import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/compo
 import { usePaneHost } from "@/panels/pane-context";
 import { OverlayDismissalScope, useDismissOverlays } from "@/components/ui/overlay-dismissal";
 import type { PaneHost } from "@/panels/panel-manifest";
-import { useAppSettings } from "@/hooks/use-settings";
+import { useAppSettings, useSettings } from "@/hooks/use-settings";
+import { isMicrophoneEnabled } from "@/audio/microphone-policy";
 import { RenderProfile } from "@/utils/render-profiler";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb, isNative } from "@/constants/platform";
@@ -1326,7 +1327,9 @@ function ComposerContentImpl({
     agentDirectoryStatus,
   });
 
-  const { settings: appSettings } = useAppSettings();
+  const { settings: appSettings, isLoading: isAppSettingsLoading } = useAppSettings();
+  const microphoneEnabledSetting = useSettings((settings) => settings.microphoneEnabled);
+  const microphoneEnabled = !isAppSettingsLoading && microphoneEnabledSetting;
 
   const agentState = useSessionStore(useShallow(buildAgentStateSelector(serverId, agentId)));
 
@@ -2038,6 +2041,7 @@ function ComposerContentImpl({
   const isVoiceModeForAgent = resolveIsVoiceModeForAgent(voice, serverId, agentId);
 
   const handleToggleRealtimeVoice = useCallback(() => {
+    if (!microphoneEnabled || !isMicrophoneEnabled()) return;
     attemptStartRealtimeVoice({
       voice,
       isConnected,
@@ -2046,7 +2050,7 @@ function ComposerContentImpl({
       agentId,
       toastErrorRef,
     });
-  }, [agentId, hasAgent, isConnected, serverId, voice]);
+  }, [agentId, hasAgent, isConnected, microphoneEnabled, serverId, voice]);
 
   const handleEditQueuedMessage = useCallback(
     (id: string) => {
@@ -2167,7 +2171,7 @@ function ComposerContentImpl({
         isVoiceModeForAgent,
         hasAgent,
         isAgentRunning,
-        showVoice: mode.showVoice,
+        showVoice: mode.showVoice && microphoneEnabled,
       }) ? (
         <View style={styles.rightControls}>
           <ComposerVoiceModeButton
@@ -2190,6 +2194,7 @@ function ComposerContentImpl({
       isVoiceModeForAgent,
       isVoiceSwitching,
       mode.showVoice,
+      microphoneEnabled,
       realtimeVoiceButtonStyle,
       t,
       voiceToggleKeys,

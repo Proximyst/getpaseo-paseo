@@ -1,6 +1,11 @@
 import { type DesktopHostBridge, getDesktopHost } from "@/desktop/host";
 import { isNative, isWeb } from "@/constants/platform";
 import { i18n } from "@/i18n/i18next";
+import {
+  isMicrophoneEnabled,
+  requireMicrophoneEnabled,
+  subscribeMicrophoneDisabled,
+} from "@/audio/microphone-policy";
 
 export type DesktopPermissionKind = "notifications" | "microphone";
 
@@ -126,6 +131,13 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
     return env.isWeb && env.getDesktopHost() !== null;
   }
 
+  function microphoneDisabledStatus(): DesktopPermissionStatus {
+    return status({
+      state: "unavailable",
+      detail: i18n.t("desktop.permissions.microphone.disabled"),
+    });
+  }
+
   async function getNotificationPermissionStatus(): Promise<DesktopPermissionStatus> {
     if (!env.isWeb) {
       return status({
@@ -166,6 +178,18 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
         state: "unavailable",
         detail: i18n.t("desktop.permissions.microphone.webOnly"),
       });
+    }
+    let cancelled = false;
+    const unsubscribe = subscribeMicrophoneDisabled(() => {
+      cancelled = true;
+    });
+    try {
+      await requireMicrophoneEnabled();
+      if (cancelled) return microphoneDisabledStatus();
+    } catch {
+      return microphoneDisabledStatus();
+    } finally {
+      unsubscribe();
     }
 
     const webNavigator = env.getNavigator();
@@ -281,16 +305,26 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
       });
     }
 
+    let cancelled = false;
+    const unsubscribe = subscribeMicrophoneDisabled(() => {
+      cancelled = true;
+    });
     try {
+      await requireMicrophoneEnabled();
+      if (cancelled) return microphoneDisabledStatus();
       const stream = await webNavigator.mediaDevices.getUserMedia({ audio: true });
       const tracks = stream && typeof stream.getTracks === "function" ? stream.getTracks() : [];
       tracks.forEach((track) => {
-        if (typeof track.stop === "function") {
-          track.stop();
+        try {
+          track.stop?.();
+        } catch {
+          // Continue releasing other tracks if one track is already stopped.
         }
       });
+      if (cancelled || !isMicrophoneEnabled()) return microphoneDisabledStatus();
       return await getMicrophonePermissionStatus();
     } catch (error) {
+      if (cancelled || !isMicrophoneEnabled()) return microphoneDisabledStatus();
       const errorName = getErrorName(error);
       if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
         return status({
@@ -310,6 +344,8 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
           message: getErrorMessage(error),
         }),
       });
+    } finally {
+      unsubscribe();
     }
   }
 

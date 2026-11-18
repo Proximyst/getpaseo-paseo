@@ -27,11 +27,10 @@ import {
   type ThemePreference,
 } from "@/styles/theme";
 import { z } from "zod";
-import { APP_SETTINGS_KEY, LEGACY_SETTINGS_KEY } from "./keys";
+import { APP_SETTINGS_KEY, APP_SETTINGS_QUERY_KEY, LEGACY_SETTINGS_KEY } from "./keys";
 import { migrateAppSettings } from "./migrations";
 
-export { APP_SETTINGS_KEY } from "./keys";
-export const APP_SETTINGS_QUERY_KEY = ["app-settings"];
+export { APP_SETTINGS_KEY, APP_SETTINGS_QUERY_KEY } from "./keys";
 
 export type SendShortcut = "enter" | "mod-enter";
 
@@ -81,6 +80,8 @@ export interface AppSettings {
   /** Which contributed theme `theme: "plugin"` selects. */
   pluginThemeId: string | null;
   language: AppLanguage;
+  microphoneEnabled: boolean;
+  notificationsEnabled: boolean;
   sendBehavior: SendBehavior;
   serviceUrlBehavior: ServiceUrlBehavior;
   terminalScrollbackLines: number;
@@ -144,6 +145,8 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   theme: DEFAULT_THEME_PREFERENCE,
   pluginThemeId: null,
   language: "system",
+  microphoneEnabled: true,
+  notificationsEnabled: true,
   sendBehavior: "steer",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
@@ -225,6 +228,8 @@ const StoredAppSettingsSchema = z
     language: z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
+    microphoneEnabled: z.boolean().catch(true),
+    notificationsEnabled: z.boolean().catch(true),
     sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
     terminalScrollbackLines: clampedNumber(
@@ -370,19 +375,26 @@ export async function saveAppSettings(input: {
   updates: AppSettingsUpdate;
   deps: SettingsDeps;
 }): Promise<void> {
+  const stored = await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY);
   const storedCurrent =
     input.queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY) ??
     (await loadAppSettingsFromStorage(input.deps));
   const current = normalizeAppSettings(storedCurrent);
+  // Another window may have changed notification delivery since this cache was loaded.
+  if (stored) {
+    current.notificationsEnabled = stored.notificationsEnabled;
+  }
   const updates = typeof input.updates === "function" ? input.updates(current) : input.updates;
   const next = { ...current, ...updates };
-  input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
-  await writeAppSettings(
-    input.deps.storage,
-    (await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY)) ??
-      StoredAppSettingsSchema.parse({}),
-    next,
-  );
+  // Notification delivery reads durable storage, so publish this preference only after saving.
+  const changesNotifications = updates.notificationsEnabled !== undefined;
+  if (!changesNotifications) {
+    input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
+  }
+  await writeAppSettings(input.deps.storage, stored ?? StoredAppSettingsSchema.parse({}), next);
+  if (changesNotifications) {
+    input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
+  }
 }
 
 export async function loadAppSettingsFromStorage(deps: SettingsDeps): Promise<AppSettings> {

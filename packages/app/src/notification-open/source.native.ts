@@ -1,4 +1,5 @@
 import * as Notifications from "expo-notifications";
+import { areNotificationsEnabled } from "@/hooks/use-settings/notifications";
 import type { NotificationOpenSource, NotificationTap } from "./source";
 
 function toTap(response: Notifications.NotificationResponse): NotificationTap {
@@ -13,7 +14,7 @@ export function createNotificationOpenSource(): NotificationOpenSource {
     handleNotification: async () => ({
       shouldShowAlert: false,
       shouldShowBanner: false,
-      shouldShowList: true,
+      shouldShowList: areNotificationsEnabled(),
       shouldPlaySound: false,
       shouldSetBadge: false,
     }),

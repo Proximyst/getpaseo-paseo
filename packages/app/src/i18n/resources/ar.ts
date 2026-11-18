@@ -1557,6 +1557,7 @@ export const ar: TranslationResources = {
         unexpectedState: "حالة إذن الإعلام غير المتوقعة:{{state}}",
       },
       microphone: {
+        disabled: "تم إيقاف الوصول إلى الميكروفون في إعدادات التطبيق.",
         webOnly: "حالة ميكروفون سطح المكتب متاحة فقط في وقت تشغيل الويب.",
         navigatorUnavailable: "Navigator غير متوفر في هذه البيئة.",
         granted: "تم منح الوصول إلى الميكروفون.",
@@ -2367,6 +2368,17 @@ export const ar: TranslationResources = {
     },
     notifications: {
       title: "الإشعارات",
+      enabled: "الإشعارات مفعّلة",
+      disabled: "الإشعارات معطّلة",
+      enabledHint: "تحكّم في الإشعارات من نسخة Paseo المثبّتة هذه.",
+      disable: "تعطيل الإشعارات",
+      enable: "تفعيل الإشعارات",
+      saveFailed: "تعذّر تغيير إعدادات الإشعارات. يُرجى المحاولة مجددًا.",
+      systemSettings: "إذن إشعارات النظام",
+      nativeDisableHint:
+        "لمنع جميع الإشعارات فورًا، أوقف إذن إشعارات Paseo في إعدادات النظام. قد تستمر المضيفات غير المتصلة أو القديمة والإشعارات التي أُرسلت بالفعل في إيصال الإشعارات. أعد منح الإذن هناك عند إعادة تفعيل الإشعارات.",
+      openSettings: "فتح إعدادات النظام",
+      openSettingsFailed: "تعذّر فتح إعدادات النظام.",
       permission: "إذن الإشعارات",
       refreshAccessibility: "تحديث إذن الإشعارات",
       playSound: "تشغيل صوت",
@@ -2474,6 +2486,10 @@ export const ar: TranslationResources = {
     general: {
       title: "عام",
       sending: "الإرسال",
+      microphone: {
+        label: "الميكروفون",
+        description: "السماح بالوصول إلى الميكروفون للإملاء والوضع الصوتي",
+      },
       setup: {
         label: "الإعداد الأولي",
         description: "أعد المرور على المظهر والمزوّدين والمشاريع وإقران الهاتف",

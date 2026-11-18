@@ -1599,6 +1599,7 @@ export const es: TranslationResources = {
         unexpectedState: "Estado de permiso de notificación inesperado:{{state}}",
       },
       microphone: {
+        disabled: "El acceso al micrófono está desactivado en los ajustes de la aplicación.",
         webOnly:
           "El estado del micrófono de escritorio solo está disponible en tiempo de ejecución web.",
         navigatorUnavailable: "Navigator no está disponible en este entorno.",
@@ -2380,6 +2381,17 @@ export const es: TranslationResources = {
     },
     notifications: {
       title: "Notificaciones",
+      enabled: "Notificaciones activadas",
+      disabled: "Notificaciones desactivadas",
+      enabledHint: "Controla las notificaciones de esta instalación de Paseo.",
+      disable: "Desactivar notificaciones",
+      enable: "Activar notificaciones",
+      saveFailed: "No se pudo cambiar la configuración de las notificaciones. Inténtalo de nuevo.",
+      systemSettings: "Permiso de notificaciones del sistema",
+      nativeDisableHint:
+        "Para bloquear todas las notificaciones de inmediato, desactiva el permiso de notificaciones de Paseo en los ajustes del sistema. Los hosts sin conexión o antiguos y las notificaciones ya enviadas aún pueden entregar notificaciones. Restaura el permiso allí al volver a activarlas.",
+      openSettings: "Abrir ajustes del sistema",
+      openSettingsFailed: "No se pudieron abrir los ajustes del sistema.",
       permission: "Permiso de notificaciones",
       refreshAccessibility: "Actualizar permiso de notificaciones",
       playSound: "Reproducir sonido",
@@ -2487,6 +2499,10 @@ export const es: TranslationResources = {
     general: {
       title: "General",
       sending: "Envío",
+      microphone: {
+        label: "Micrófono",
+        description: "Permitir el acceso al micrófono para el dictado y el modo de voz",
+      },
       setup: {
         label: "Configuración inicial",
         description:

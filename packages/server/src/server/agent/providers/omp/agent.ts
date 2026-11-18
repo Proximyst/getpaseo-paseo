@@ -2,7 +2,9 @@ import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
 import { mapCustomMessageToToolCall } from "../custom-message.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
@@ -80,6 +82,7 @@ import { mapOmpSystemNoticeToNotification } from "./system-notice.js";
 import { materializeProviderImage } from "../provider-image-output.js";
 import { OmpCliRuntime } from "./cli-runtime.js";
 import { listOmpImportableSessions, readOmpImportSessionConfig } from "./session-descriptor.js";
+import { assertOmpInteractiveSessionFile } from "./advisor-session.js";
 import type { OmpRuntime, OmpRuntimeSession, OmpStartSessionInput } from "./runtime.js";
 import { OmpMcpBridge, type OmpBridgedToolIdentity } from "./mcp-bridge.js";
 import type {
@@ -101,12 +104,13 @@ import {
   type OmpTrackedToolCall,
 } from "./tool-call-detail.js";
 import { mapOmpAvailableCommandsUpdate, mapOmpRuntimeSlashCommands } from "./commands.js";
-import { readOmpHistoryTodoState, streamOmpHistory } from "./history.js";
+import { readActiveOmpEntryChain, readOmpHistoryTodoState, streamOmpHistory } from "./history.js";
 import { mapOmpTodoReminderEvent, mapOmpTodoState, mapOmpTodoToolResult } from "./todo-mapper.js";
 import { mapOmpRuntimeEventToTimelineItem } from "./event-mapper.js";
 import { mapOmpAdvisorMessageToToolCall } from "./advisor-message.js";
 import { handleOmpHostToolRuntimeEvent, OmpHostToolRouter } from "./host-tools.js";
 import { OmpSubagentIndex } from "./subagent-index.js";
+import { OmpAdvisorIndex } from "./advisor-index.js";
 import { OmpQuestionUi } from "./question-ui.js";
 import { mapOmpToolDetail } from "./tool-call-mapper.js";
 import { OmpUsagePoller, type OmpUsagePollScheduler } from "./usage-poller.js";
@@ -595,6 +599,7 @@ class OmpHistorySession implements AgentSession {
     private readonly sessionFile: string,
     provider: AgentProvider,
     private readonly bridgedTools: ReadonlyMap<string, OmpBridgedToolIdentity>,
+    private readonly logger: Logger,
   ) {
     this.provider = provider;
   }
@@ -620,6 +625,9 @@ class OmpHistorySession implements AgentSession {
       sessionFile: this.sessionFile,
       provider: this.provider,
       bridgedTools: this.bridgedTools,
+      onAdvisorError: ({ file, error }) => {
+        this.logger.debug({ err: error, file }, "OMP advisor transcript history failed");
+      },
     });
     const todo = await readOmpHistoryTodoState(this.sessionFile);
     if (todo) yield { type: "timeline", provider: this.provider, item: todo };
@@ -691,6 +699,10 @@ export class OmpAgentSession implements AgentSession {
   private manualCompactionRunning = false;
   private commandCache: AgentSlashCommand[] | null = null;
   private readonly subagentIndex = new OmpSubagentIndex();
+  private readonly advisorIndex = new OmpAdvisorIndex();
+  private advisorRefresh: Promise<void> | null = null;
+  private advisorHistoryReaders = 0;
+  private readonly advisorRefreshTimer: NodeJS.Timeout;
   private readonly subagentCardTracker: OmpSubagentCardTracker;
   private lastTodoItem: Extract<AgentTimelineItem, { type: "todo" }> | null = null;
   private state: OmpSessionState;
@@ -756,6 +768,10 @@ export class OmpAgentSession implements AgentSession {
       this.state.thinkingLevel ??
       null;
     this.attachRuntime(this.runtimeSession);
+    // Recorder writes are asynchronous and can finish after advisor_yielded. Inspect only
+    // changed sidecars, including while the primary is idle; never poll history-only sessions.
+    this.advisorRefreshTimer = setInterval(() => this.refreshAdvisors(), 5_000);
+    this.advisorRefreshTimer.unref();
   }
 
   private attachRuntime(runtime: OmpRuntimeSession): void {
@@ -1008,18 +1024,28 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
-    yield* streamOmpHistory({
-      sessionFile: this.state.sessionFile,
-      runtimeSession: this.runtimeSession,
-      provider: this.provider,
-      bridgedTools: this.hostTools?.bridge?.toolIdentities(),
-    });
-    for (const item of mapOmpTodoState(this.state)) {
-      yield {
-        type: "timeline",
+    this.advisorHistoryReaders += 1;
+    try {
+      await this.advisorRefresh;
+      yield* streamOmpHistory({
+        sessionFile: this.state.sessionFile,
+        runtimeSession: this.runtimeSession,
         provider: this.provider,
-        item,
-      };
+        bridgedTools: this.hostTools?.bridge?.toolIdentities(),
+        advisorIndex: this.advisorIndex,
+        onAdvisorError: ({ file, error }) => {
+          this.logger.debug({ err: error, file }, "OMP advisor transcript history failed");
+        },
+      });
+      for (const item of mapOmpTodoState(this.state)) {
+        yield {
+          type: "timeline",
+          provider: this.provider,
+          item,
+        };
+      }
+    } finally {
+      this.advisorHistoryReaders -= 1;
     }
   }
 
@@ -1074,6 +1100,7 @@ export class OmpAgentSession implements AgentSession {
       try {
         if (this.closed) throw new Error("OMP session is closed");
         const state = await next.getState();
+        await this.advisorRefresh;
         if (this.closed) throw new Error("OMP session is closed");
         this.unsubscribeRuntime?.();
         // Request ids restart with each OMP process, so results held for the old one cannot
@@ -1209,6 +1236,7 @@ export class OmpAgentSession implements AgentSession {
     this.closed = true;
     this.unsubscribeRuntime?.();
     this.usagePoller.close();
+    clearInterval(this.advisorRefreshTimer);
     this.cancelNoTurnPromptCompletion();
     try {
       await this.runtimeSession.close();
@@ -1681,8 +1709,78 @@ export class OmpAgentSession implements AgentSession {
     return true;
   }
 
+  private refreshAdvisors(): void {
+    if (this.closed || this.runtimeDead || this.advisorRefresh || this.advisorHistoryReaders > 0)
+      return;
+    const runtime = this.runtimeSession;
+    const sessionFile = this.state.sessionFile;
+    this.advisorRefresh = this.advisorIndex
+      .refreshAll(sessionFile, readActiveOmpEntryChain)
+      .then(({ events, errors }) => {
+        for (const { file, error } of errors) {
+          this.logger.debug({ err: error, file }, "OMP advisor transcript refresh failed");
+        }
+        if (
+          !this.closed &&
+          runtime === this.runtimeSession &&
+          sessionFile === this.state.sessionFile
+        ) {
+          for (const event of events) this.emit(event);
+        }
+        return undefined;
+      })
+      .catch((error: unknown) => {
+        this.logger.debug({ err: error }, "OMP advisor transcript refresh failed");
+      })
+      .finally(() => {
+        this.advisorRefresh = null;
+      });
+  }
+
+  private handleSubagentRuntimeEvent(event: OmpRuntimeEvent): boolean {
+    if (event.type === "subagent_lifecycle") {
+      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_lifecycle" }>).payload;
+      if (payload.sessionFile) this.advisorIndex.trackSession(payload.sessionFile, payload.id);
+      if (payload.parentToolCallId && this.activeToolCalls.has(payload.parentToolCallId)) {
+        this.subagentCardTracker.handleLifecycle(payload, (toolCallId) =>
+          this.emitActiveToolCall(toolCallId),
+        );
+      }
+      for (const mapped of this.subagentIndex.handleLifecycle(this.runtimeSession, payload)) {
+        this.emit(mapped);
+      }
+      return true;
+    }
+    if (event.type === "subagent_progress") {
+      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_progress" }>).payload;
+      if (payload.sessionFile)
+        this.advisorIndex.trackSession(payload.sessionFile, payload.progress.id);
+      if (payload.parentToolCallId && this.activeToolCalls.has(payload.parentToolCallId)) {
+        this.subagentCardTracker.handleProgress(payload, (toolCallId) =>
+          this.emitActiveToolCall(toolCallId),
+        );
+      }
+      for (const mapped of this.subagentIndex.handleProgress(this.runtimeSession, payload)) {
+        this.emit(mapped);
+      }
+      return true;
+    }
+    if (event.type === "subagent_event") {
+      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_event" }>).payload;
+      for (const mapped of this.subagentIndex.handleEvent(this.runtimeSession, payload)) {
+        this.emit(mapped);
+      }
+      return true;
+    }
+    return false;
+  }
+
   private handleExtraRuntimeEvent(event: OmpRuntimeEvent): boolean {
     if (this.handleThinkingLevelChanged(event)) {
+      return true;
+    }
+    if (event.type === "advisor_cost_changed" || event.type === "advisor_yielded") {
+      this.refreshAdvisors();
       return true;
     }
     if (event.type === "model_changed") {
@@ -1702,35 +1800,7 @@ export class OmpAgentSession implements AgentSession {
     if (handleOmpHostToolRuntimeEvent(event, this.hostTools, this.runtimeSession, this.logger)) {
       return true;
     }
-    if (event.type === "subagent_lifecycle") {
-      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_lifecycle" }>).payload;
-      if (payload.parentToolCallId && this.activeToolCalls.has(payload.parentToolCallId)) {
-        this.subagentCardTracker.handleLifecycle(payload, (toolCallId) =>
-          this.emitActiveToolCall(toolCallId),
-        );
-      }
-      for (const mapped of this.subagentIndex.handleLifecycle(this.runtimeSession, payload)) {
-        this.emit(mapped);
-      }
-      return true;
-    }
-    if (event.type === "subagent_progress") {
-      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_progress" }>).payload;
-      if (payload.parentToolCallId && this.activeToolCalls.has(payload.parentToolCallId)) {
-        this.subagentCardTracker.handleProgress(payload, (toolCallId) =>
-          this.emitActiveToolCall(toolCallId),
-        );
-      }
-      for (const mapped of this.subagentIndex.handleProgress(this.runtimeSession, payload)) {
-        this.emit(mapped);
-      }
-      return true;
-    }
-    if (event.type === "subagent_event") {
-      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_event" }>).payload;
-      for (const mapped of this.subagentIndex.handleEvent(this.runtimeSession, payload)) {
-        this.emit(mapped);
-      }
+    if (this.handleSubagentRuntimeEvent(event)) {
       return true;
     }
     if (event.type === "todo_reminder") {
@@ -2427,8 +2497,10 @@ export class OmpAgentClient implements AgentClient {
         sessionFile,
         this.provider,
         persistenceMetadata.bridgedTools,
+        this.logger,
       );
     }
+    assertOmpInteractiveSessionFile(sessionFile);
 
     const launchMode = this.resolveLaunchMode(
       resumeConfig.modeId,
@@ -2546,6 +2618,10 @@ export class OmpAgentClient implements AgentClient {
     context?: ProviderRefreshContext,
   ): Promise<ProviderCatalog> {
     const launchMode = this.resolveLaunchMode(undefined, options.providerOptions);
+    const cwd =
+      options.scope === "global"
+        ? await mkdtemp(join(tmpdir(), "paseo-omp-catalog-"))
+        : options.cwd;
     let runtimeSession: OmpRuntimeSession | undefined;
     let closePromise: Promise<void> | undefined;
     const closeSession = () => {
@@ -2558,7 +2634,7 @@ export class OmpAgentClient implements AgentClient {
     try {
       await runProviderRefreshActivity(context, "runtime.start", async () => {
         runtimeSession = await this.resolveRuntime(options.providerOptions).startSession({
-          cwd: options.scope === "global" ? homedir() : options.cwd,
+          cwd,
           protocolMode: "rpc-ui",
           modeId: launchMode.modeId,
           extraArgs: launchMode.extraArgs,
@@ -2576,7 +2652,13 @@ export class OmpAgentClient implements AgentClient {
       return { models, modes: [...OMP_MODES] };
     } finally {
       context?.signal.removeEventListener("abort", handleAbort);
-      await closeSession();
+      try {
+        await closeSession();
+      } finally {
+        if (options.scope === "global") {
+          await rm(cwd, { recursive: true, force: true });
+        }
+      }
     }
   }
 

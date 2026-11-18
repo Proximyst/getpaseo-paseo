@@ -1583,6 +1583,7 @@ export const en = {
         unexpectedState: "Unexpected notification permission state: {{state}}",
       },
       microphone: {
+        disabled: "Microphone access is turned off in app settings.",
         webOnly: "Desktop microphone status is only available on web runtime.",
         navigatorUnavailable: "Navigator is unavailable in this environment.",
         granted: "Microphone access is granted.",
@@ -2397,6 +2398,17 @@ export const en = {
     },
     notifications: {
       title: "Notifications",
+      enabled: "Notifications enabled",
+      disabled: "Notifications disabled",
+      enabledHint: "Control notifications from this installation of Paseo.",
+      disable: "Disable notifications",
+      enable: "Enable notifications",
+      saveFailed: "Could not change notification settings. Please try again.",
+      systemSettings: "System notification permission",
+      nativeDisableHint:
+        "For an immediate, complete block, turn off Paseo's notification permission in system settings. Offline or older hosts and notifications already sent can still deliver. Restore permission there when re-enabling notifications.",
+      openSettings: "Open system settings",
+      openSettingsFailed: "Could not open system settings.",
       permission: "Notification permission",
       refreshAccessibility: "Refresh notification permission",
       playSound: "Play sound",
@@ -2569,6 +2581,10 @@ export const en = {
     general: {
       title: "General",
       sending: "Sending",
+      microphone: {
+        label: "Microphone",
+        description: "Allow microphone access for dictation and voice mode",
+      },
       setup: {
         label: "First-run setup",
         description: "Walk through appearance, providers, projects and phone pairing again",

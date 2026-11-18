@@ -3,6 +3,12 @@ import { Buffer } from "buffer";
 import { useState } from "react";
 
 import { createAudioEngine } from "@/audio";
+import {
+  isMicrophoneEnabled,
+  requireMicrophoneEnabled,
+  subscribeMicrophoneDisabled,
+} from "@/audio/microphone-policy";
+import { AttemptGuard } from "@/utils/attempt-guard";
 
 import type {
   DictationAudioSource,
@@ -16,6 +22,7 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
   const [volume, setVolume] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const engineRef = useRef<ReturnType<typeof createAudioEngine> | null>(null);
+  const captureAttemptRef = useRef(new AttemptGuard());
 
   const getOrCreateEngine = useCallback(() => {
     if (engineRef.current) {
@@ -25,10 +32,11 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
     engineRef.current = createAudioEngine(
       {
         onCaptureData: (pcm) => {
+          if (!isMicrophoneEnabled()) return;
           onPcmSegmentRef.current(Buffer.from(pcm).toString("base64"));
         },
         onVolumeLevel: (level) => {
-          setVolume(level);
+          setVolume(isMicrophoneEnabled() ? level : 0);
         },
         onError: (error) => {
           onErrorRef.current?.(error);
@@ -51,18 +59,30 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
 
   const start = useCallback(async () => {
     const engine = getOrCreateEngine();
+    const attemptId = captureAttemptRef.current.next();
+    await requireMicrophoneEnabled();
+    captureAttemptRef.current.assertCurrent(attemptId);
     await engine.initialize();
+    captureAttemptRef.current.assertCurrent(attemptId);
     await engine.startCapture();
   }, [getOrCreateEngine]);
 
   const stop = useCallback(async () => {
+    captureAttemptRef.current.cancel();
     await engineRef.current?.stopCapture();
     setVolume(0);
   }, []);
 
   useEffect(() => {
+    const unsubscribeMicrophoneDisabled = subscribeMicrophoneDisabled(() => {
+      captureAttemptRef.current.cancel();
+      setVolume(0);
+      setIsPaused(false);
+    });
     return () => {
       const engine = engineRef.current;
+      captureAttemptRef.current.cancel();
+      unsubscribeMicrophoneDisabled();
       engineRef.current = null;
       void engine?.destroy().catch(() => undefined);
     };

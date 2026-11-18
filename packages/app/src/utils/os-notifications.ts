@@ -2,6 +2,7 @@ import { Asset } from "expo-asset";
 import { getDesktopHost } from "@/desktop/host";
 import { parseNotificationOpenTarget, WEB_NOTIFICATION_CLICK_EVENT } from "@/notification-open";
 import { isNative } from "@/constants/platform";
+import { loadAppSettingsFromStorage } from "@/hooks/use-settings";
 
 interface OsNotificationPayload {
   title: string;
@@ -89,7 +90,7 @@ async function ensureNotificationPermission(): Promise<boolean> {
 }
 
 export async function ensureOsNotificationPermission(): Promise<boolean> {
-  if (isNative) {
+  if (isNative || !(await loadAppSettingsFromStorage()).notificationsEnabled) {
     return false;
   }
   return await ensureNotificationPermission();
@@ -143,7 +144,8 @@ function attachWebClickHandler(
 
 export async function sendOsNotification(payload: OsNotificationPayload): Promise<boolean> {
   // Mobile/native notifications should be remote push only.
-  if (isNative) {
+  // Other open windows may have a stale query cache; durable settings govern delivery.
+  if (isNative || !(await loadAppSettingsFromStorage()).notificationsEnabled) {
     return false;
   }
 
@@ -155,7 +157,7 @@ export async function sendOsNotification(payload: OsNotificationPayload): Promis
   const NotificationConstructor = getWebNotificationConstructor();
   if (NotificationConstructor) {
     const granted = await ensureNotificationPermission();
-    if (granted) {
+    if (granted && (await loadAppSettingsFromStorage()).notificationsEnabled) {
       const notification = new NotificationConstructor(payload.title, {
         body: payload.body,
         data: payload.data,

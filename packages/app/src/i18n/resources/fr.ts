@@ -1595,6 +1595,7 @@ export const fr: TranslationResources = {
         unexpectedState: "État d’autorisation de notification inattendu : {{state}}",
       },
       microphone: {
+        disabled: "L’accès au microphone est désactivé dans les paramètres de l’application.",
         webOnly: "L’état du microphone n’est disponible que dans l’environnement web.",
         navigatorUnavailable: "L’objet navigator n’est pas disponible dans cet environnement.",
         granted: "L’accès au microphone est autorisé.",
@@ -2381,6 +2382,17 @@ export const fr: TranslationResources = {
     },
     notifications: {
       title: "Notifications",
+      enabled: "Notifications activées",
+      disabled: "Notifications désactivées",
+      enabledHint: "Contrôlez les notifications de cette installation de Paseo.",
+      disable: "Désactiver les notifications",
+      enable: "Activer les notifications",
+      saveFailed: "Impossible de modifier les paramètres de notification. Réessayez.",
+      systemSettings: "Autorisation système des notifications",
+      nativeDisableHint:
+        "Pour tout bloquer immédiatement, désactivez l’autorisation des notifications de Paseo dans les réglages système. Les hôtes hors ligne ou anciens et les notifications déjà envoyées peuvent encore transmettre des notifications. Rétablissez cette autorisation lors de la réactivation.",
+      openSettings: "Ouvrir les réglages système",
+      openSettingsFailed: "Impossible d’ouvrir les réglages système.",
       permission: "Autorisation des notifications",
       refreshAccessibility: "Actualiser l’autorisation des notifications",
       playSound: "Émettre un son",
@@ -2488,6 +2500,10 @@ export const fr: TranslationResources = {
     general: {
       title: "Général",
       sending: "Envoi",
+      microphone: {
+        label: "Microphone",
+        description: "Autoriser l’accès au microphone pour la dictée et le mode vocal",
+      },
       setup: {
         label: "Configuration initiale",
         description:

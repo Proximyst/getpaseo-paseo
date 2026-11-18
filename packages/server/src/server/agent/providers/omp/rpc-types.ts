@@ -536,6 +536,9 @@ export const OmpRuntimeEventSchema = z.discriminatedUnion("type", [
       configured: z.string().optional(),
     })
     .passthrough(),
+  // These upstream notifications have no advisor identity or transcript payload.
+  z.object({ type: z.literal("advisor_cost_changed") }).passthrough(),
+  z.object({ type: z.literal("advisor_yielded") }).passthrough(),
 ]);
 
 const OmpCommandBase = { id: z.string().optional() };

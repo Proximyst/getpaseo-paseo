@@ -1586,6 +1586,7 @@ export const ptBR: TranslationResources = {
         unexpectedState: "Estado inesperado de permissão de notificação: {{state}}",
       },
       microphone: {
+        disabled: "O acesso ao microfone está desativado nas configurações do app.",
         webOnly: "O status do microfone desktop só está disponível no runtime web.",
         navigatorUnavailable: "Navigator não está disponível neste ambiente.",
         granted: "O acesso ao microfone foi concedido.",
@@ -2365,6 +2366,17 @@ export const ptBR: TranslationResources = {
     },
     notifications: {
       title: "Notificações",
+      enabled: "Notificações ativadas",
+      disabled: "Notificações desativadas",
+      enabledHint: "Controle as notificações desta instalação do Paseo.",
+      disable: "Desativar notificações",
+      enable: "Ativar notificações",
+      saveFailed: "Não foi possível alterar as configurações de notificações. Tente novamente.",
+      systemSettings: "Permissão de notificações do sistema",
+      nativeDisableHint:
+        "Para bloquear todas as notificações imediatamente, desative a permissão de notificações do Paseo nas configurações do sistema. Hosts offline ou antigos e notificações já enviadas ainda podem entregar notificações. Restaure a permissão lá ao reativar as notificações.",
+      openSettings: "Abrir configurações do sistema",
+      openSettingsFailed: "Não foi possível abrir as configurações do sistema.",
       permission: "Permissão de notificações",
       refreshAccessibility: "Atualizar permissão de notificações",
       playSound: "Reproduzir som",
@@ -2472,6 +2484,10 @@ export const ptBR: TranslationResources = {
     general: {
       title: "Geral",
       sending: "Envio",
+      microphone: {
+        label: "Microfone",
+        description: "Permitir acesso ao microfone para ditado e modo de voz",
+      },
       setup: {
         label: "Configuração inicial",
         description: "Rever aparência, provedores, projetos e pareamento do celular",

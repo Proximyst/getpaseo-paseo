@@ -2,6 +2,12 @@ import { resampleToPcm16 } from "@/audio/pcm";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parsePcm16Wav } from "@/utils/pcm16-wav";
 import { isElectronRuntime } from "@/desktop/host";
+import {
+  isMicrophoneEnabled,
+  requireMicrophoneEnabled,
+  subscribeMicrophoneDisabled,
+} from "@/audio/microphone-policy";
+import { AttemptCancelledError, AttemptGuard } from "@/utils/attempt-guard";
 
 import type {
   DictationAudioSource,
@@ -54,6 +60,7 @@ interface RecorderRefs {
   stoppedPromise: Promise<Blob> | null;
   stoppedResolve: ((blob: Blob) => void) | null;
   stoppedReject: ((error: unknown) => void) | null;
+  stopAttemptId?: number;
 }
 
 function safeDisconnectNode(node: AudioNode | null): void {
@@ -135,6 +142,7 @@ async function finalizeRecorderStoppedPromise(input: {
 
 export function useDictationAudioSource(config: DictationAudioSourceConfig): DictationAudioSource {
   const [volume, setVolume] = useState(0);
+  const captureAttemptRef = useRef(new AttemptGuard());
 
   const onPcmSegmentRef = useRef(config.onPcmSegment);
   const onErrorRef = useRef(config.onError);
@@ -186,6 +194,7 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
   );
 
   const emitPcmSegments = useCallback((pcm: Int16Array) => {
+    if (!isMicrophoneEnabled()) return;
     const outputRate = 16000;
     const chunkSamples = outputRate; // ~1s
     let pending = pcm;
@@ -200,6 +209,10 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
   }, []);
 
   const start = useCallback(async () => {
+    if (refs.current.started && isMicrophoneEnabled()) return;
+    const attemptId = captureAttemptRef.current.next();
+    await requireMicrophoneEnabled();
+    captureAttemptRef.current.assertCurrent(attemptId);
     const missingNavigator =
       typeof navigator === "undefined" ||
       !navigator.mediaDevices ||
@@ -241,189 +254,232 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
         autoGainControl: true,
       },
     });
+    if (!captureAttemptRef.current.isCurrent(attemptId) || !isMicrophoneEnabled()) {
+      rawStream.getTracks().forEach((track) => track.stop());
+      throw new AttemptCancelledError();
+    }
 
     const stream = rawStream;
-
-    const context = new AudioContextCtor();
-
+    refs.current.stream = stream;
     try {
-      const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(4096, 1, 1);
-      const gain = context.createGain();
-      gain.gain.value = 0;
+      const context = new AudioContextCtor();
+      refs.current.context = context;
 
-      const outputRate = 16000;
-      const chunkSamples = outputRate; // ~1s
+      try {
+        const source = context.createMediaStreamSource(stream);
+        refs.current.source = source;
+        const processor = context.createScriptProcessor(4096, 1, 1);
+        refs.current.processor = processor;
+        const gain = context.createGain();
+        refs.current.gain = gain;
+        gain.gain.value = 0;
 
-      refs.current.started = true;
-      refs.current.mode = "pcm";
+        const outputRate = 16000;
+        const chunkSamples = outputRate; // ~1s
 
-      processor.onaudioprocess = (event) => {
-        if (!refs.current.started) {
-          return;
-        }
-        const input = event.inputBuffer.getChannelData(0);
+        refs.current.started = true;
+        refs.current.mode = "pcm";
 
-        let sumSquares = 0;
-        for (let i = 0; i < input.length; i++) {
-          const sample = input[i];
-          sumSquares += sample * sample;
-        }
-        const rms = Math.sqrt(sumSquares / Math.max(1, input.length));
-        const normalized = Math.min(1, Math.max(0, rms * 2));
-        setVolume(normalized);
+        processor.onaudioprocess = (event) => {
+          if (
+            !refs.current.started ||
+            !captureAttemptRef.current.isCurrent(attemptId) ||
+            !isMicrophoneEnabled()
+          ) {
+            return;
+          }
+          const input = event.inputBuffer.getChannelData(0);
 
-        const next = resampleToPcm16(input, context.sampleRate, outputRate);
-        refs.current.pending = concatInt16(refs.current.pending, next);
+          let sumSquares = 0;
+          for (let i = 0; i < input.length; i++) {
+            const sample = input[i];
+            sumSquares += sample * sample;
+          }
+          const rms = Math.sqrt(sumSquares / Math.max(1, input.length));
+          const normalized = Math.min(1, Math.max(0, rms * 2));
+          setVolume(normalized);
 
-        while (refs.current.pending.length >= chunkSamples) {
-          const chunk = refs.current.pending.slice(0, chunkSamples);
-          refs.current.pending = refs.current.pending.slice(chunkSamples);
-          onPcmSegmentRef.current(int16ToBase64(chunk));
-        }
+          const next = resampleToPcm16(input, context.sampleRate, outputRate);
+          refs.current.pending = concatInt16(refs.current.pending, next);
+
+          while (refs.current.pending.length >= chunkSamples) {
+            const chunk = refs.current.pending.slice(0, chunkSamples);
+            refs.current.pending = refs.current.pending.slice(chunkSamples);
+            onPcmSegmentRef.current(int16ToBase64(chunk));
+          }
+        };
+
+        source.connect(processor);
+        processor.connect(gain);
+        gain.connect(context.destination);
+
+        refs.current = {
+          ...refs.current,
+          stream,
+          context,
+          source,
+          processor,
+          gain,
+          pending: new Int16Array(0),
+          started: true,
+        };
+        return;
+      } catch {
+        disconnectDictationAudioGraph({ ...refs.current, stream: null });
+        refs.current.source = null;
+        refs.current.processor = null;
+        refs.current.gain = null;
+        refs.current.started = false;
+        // Fall back to MediaRecorder for environments where MediaStreamAudioSourceNode
+        // isn't available (e.g., Playwright tests with a stubbed getUserMedia).
+      }
+
+      const RecorderCtor =
+        typeof window !== "undefined"
+          ? (window as Window & { MediaRecorder?: typeof MediaRecorder }).MediaRecorder
+          : undefined;
+      if (!RecorderCtor) {
+        throw new Error("MediaRecorder unavailable");
+      }
+
+      const recorder = new RecorderCtor(stream, {
+        mimeType: "audio/webm;codecs=opus",
+      } as MediaRecorderOptions);
+
+      const recorderRefs: RecorderRefs = {
+        recorder,
+        audioChunks: [],
+        stoppedPromise: null,
+        stoppedResolve: null,
+        stoppedReject: null,
       };
 
-      source.connect(processor);
-      processor.connect(gain);
-      gain.connect(context.destination);
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (
+          !isMicrophoneEnabled() ||
+          (!captureAttemptRef.current.isCurrent(attemptId) &&
+            (recorderRefs.stopAttemptId === undefined ||
+              !captureAttemptRef.current.isCurrent(recorderRefs.stopAttemptId)))
+        ) {
+          return;
+        }
+        const data: Blob | undefined = event?.data;
+        if (data) {
+          recorderRefs.audioChunks.push(data);
+        }
+      };
+      recorder.addEventListener("error", (event: Event) => {
+        recorderRefs.stoppedReject?.(event);
+      });
+      recorder.addEventListener("stop", () => {
+        try {
+          const blob =
+            recorderRefs.audioChunks.length > 0
+              ? new Blob(recorderRefs.audioChunks, { type: recorder.mimeType })
+              : new Blob([], { type: recorder.mimeType });
+          recorderRefs.stoppedResolve?.(blob);
+        } catch (err) {
+          recorderRefs.stoppedReject?.(err);
+        }
+      });
+
+      recorderRefs.stoppedPromise = new Promise<Blob>((resolve, reject) => {
+        recorderRefs.stoppedResolve = resolve;
+        recorderRefs.stoppedReject = reject;
+      });
+      void recorderRefs.stoppedPromise.catch(() => undefined);
 
       refs.current = {
         ...refs.current,
         stream,
         context,
-        source,
-        processor,
-        gain,
+        source: null,
+        processor: null,
+        gain: null,
         pending: new Int16Array(0),
-        started: true,
+        started: false,
+        mode: "recorder",
+        recorder: recorderRefs,
       };
-      return;
-    } catch {
-      // Fall back to MediaRecorder for environments where MediaStreamAudioSourceNode
-      // isn't available (e.g., Playwright tests with a stubbed getUserMedia).
-    }
-
-    const RecorderCtor =
-      typeof window !== "undefined"
-        ? (window as Window & { MediaRecorder?: typeof MediaRecorder }).MediaRecorder
-        : undefined;
-    if (!RecorderCtor) {
-      throw new Error("MediaRecorder unavailable");
-    }
-
-    const recorder = new RecorderCtor(stream, {
-      mimeType: "audio/webm;codecs=opus",
-    } as MediaRecorderOptions);
-
-    const recorderRefs: RecorderRefs = {
-      recorder,
-      audioChunks: [],
-      stoppedPromise: null,
-      stoppedResolve: null,
-      stoppedReject: null,
-    };
-
-    recorder.ondataavailable = (event: BlobEvent) => {
-      const data: Blob | undefined = event?.data;
-      if (data) {
-        recorderRefs.audioChunks.push(data);
-      }
-    };
-    recorder.addEventListener("error", (event: Event) => {
-      recorderRefs.stoppedReject?.(event);
-    });
-    recorder.addEventListener("stop", () => {
-      try {
-        const blob =
-          recorderRefs.audioChunks.length > 0
-            ? new Blob(recorderRefs.audioChunks, { type: recorder.mimeType })
-            : new Blob([], { type: recorder.mimeType });
-        recorderRefs.stoppedResolve?.(blob);
-      } catch (err) {
-        recorderRefs.stoppedReject?.(err);
-      }
-    });
-
-    recorderRefs.stoppedPromise = new Promise<Blob>((resolve, reject) => {
-      recorderRefs.stoppedResolve = resolve;
-      recorderRefs.stoppedReject = reject;
-    });
-
-    try {
       recorder.start();
-    } catch (err) {
-      throw err instanceof Error ? err : new Error(String(err));
+      refs.current.started = true;
+    } catch (error) {
+      const graph = refs.current;
+      graph.started = false;
+      disconnectDictationAudioGraph(graph);
+      stopMediaRecorderIfActive(graph.recorder.recorder);
+      const context = graph.context;
+      graph.stream = null;
+      graph.context = null;
+      graph.source = null;
+      graph.processor = null;
+      graph.gain = null;
+      graph.pending = new Int16Array(0);
+      if (context) await context.close().catch(() => undefined);
+      throw error instanceof Error ? error : new Error(String(error));
     }
-
-    refs.current = {
-      ...refs.current,
-      stream,
-      context,
-      source: null,
-      processor: null,
-      gain: null,
-      pending: new Int16Array(0),
-      started: true,
-      mode: "recorder",
-      recorder: recorderRefs,
-    };
   }, []);
 
-  const stop = useCallback(async () => {
-    refs.current.started = false;
-    setVolume(0);
+  const stop = useCallback(
+    async (emitPending = true) => {
+      const attemptId = captureAttemptRef.current.next();
+      const { processor, source, gain, context, stream, pending, mode, recorder } = refs.current;
+      refs.current = {
+        stream: null,
+        context: null,
+        source: null,
+        processor: null,
+        gain: null,
+        pending: new Int16Array(0),
+        started: false,
+        mode: "pcm",
+        recorder: {
+          recorder: null,
+          audioChunks: [],
+          stoppedPromise: null,
+          stoppedResolve: null,
+          stoppedReject: null,
+        },
+      };
+      setVolume(0);
+      disconnectDictationAudioGraph({ processor, source, gain, stream });
+      const canEmit = () =>
+        emitPending && captureAttemptRef.current.isCurrent(attemptId) && isMicrophoneEnabled();
 
-    const { processor, source, gain, context, stream, pending, mode, recorder } = refs.current;
-
-    disconnectDictationAudioGraph({ processor, source, gain, stream });
-
-    if (mode === "recorder") {
-      stopMediaRecorderIfActive(recorder.recorder);
-      if (recorder.stoppedPromise) {
-        await finalizeRecorderStoppedPromise({
-          stoppedPromise: recorder.stoppedPromise,
-          context,
-          decodeAudioData,
-          emitPcmSegments,
-          onError: onErrorRef.current,
-        });
+      if (mode === "recorder") {
+        recorder.stopAttemptId = emitPending ? attemptId : undefined;
+        stopMediaRecorderIfActive(recorder.recorder);
+        if (emitPending && recorder.stoppedPromise) {
+          await finalizeRecorderStoppedPromise({
+            stoppedPromise: recorder.stoppedPromise,
+            context,
+            decodeAudioData,
+            emitPcmSegments: (pcm) => {
+              if (canEmit()) emitPcmSegments(pcm);
+            },
+            onError: (error) => {
+              if (canEmit()) onErrorRef.current?.(error);
+            },
+          });
+        }
       }
-    }
-
-    if (context) {
-      try {
-        await context.close();
-      } catch {
-        // no-op
+      if (context) {
+        await context.close().catch(() => undefined);
       }
-    }
-
-    if (pending.length > 0) {
-      onPcmSegmentRef.current(int16ToBase64(pending));
-    }
-
-    refs.current = {
-      stream: null,
-      context: null,
-      source: null,
-      processor: null,
-      gain: null,
-      pending: new Int16Array(0),
-      started: false,
-      mode: "pcm",
-      recorder: {
-        recorder: null,
-        audioChunks: [],
-        stoppedPromise: null,
-        stoppedResolve: null,
-        stoppedReject: null,
-      },
-    };
-  }, [decodeAudioData, emitPcmSegments]);
+      if (pending.length > 0 && canEmit()) {
+        onPcmSegmentRef.current(int16ToBase64(pending));
+      }
+    },
+    [decodeAudioData, emitPcmSegments],
+  );
 
   useEffect(() => {
+    const unsubscribeMicrophoneDisabled = subscribeMicrophoneDisabled(() => {
+      void stop(false);
+    });
     return () => {
-      void stop().catch((err) => {
+      unsubscribeMicrophoneDisabled();
+      void stop(false).catch((err) => {
         onErrorRef.current?.(err instanceof Error ? err : new Error(String(err)));
       });
     };

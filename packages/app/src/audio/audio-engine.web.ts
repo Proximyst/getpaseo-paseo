@@ -1,5 +1,11 @@
 import { parsePcmSampleRate, resampleToPcm16 } from "./pcm";
 import { isElectronRuntime } from "@/desktop/host";
+import { AttemptCancelledError, AttemptGuard } from "@/utils/attempt-guard";
+import {
+  isMicrophoneEnabled,
+  requireMicrophoneEnabled,
+  subscribeMicrophoneDisabled,
+} from "./microphone-policy";
 import type {
   AudioEngine,
   AudioEngineCallbacks,
@@ -53,6 +59,8 @@ export function createAudioEngine(
   callbacks: AudioEngineCallbacks,
   _options?: AudioEngineOptions,
 ): AudioEngine {
+  const captureAttempt = new AttemptGuard();
+  let destroyed = false;
   const refs: {
     playbackContext: AudioContext | null;
     captureContext: AudioContext | null;
@@ -101,10 +109,11 @@ export function createAudioEngine(
 
   async function ensureCaptureContext(): Promise<AudioContext> {
     if (refs.captureContext) {
-      if (refs.captureContext.state === "suspended") {
-        await refs.captureContext.resume().catch(() => undefined);
+      const context = refs.captureContext;
+      if (context.state === "suspended") {
+        await context.resume().catch(() => undefined);
       }
-      return refs.captureContext;
+      return context;
     }
 
     const AudioContextCtor = getAudioContextCtor();
@@ -113,10 +122,10 @@ export function createAudioEngine(
     }
 
     const context = new AudioContextCtor();
+    refs.captureContext = context;
     if (context.state === "suspended") {
       await context.resume().catch(() => undefined);
     }
-    refs.captureContext = context;
     return context;
   }
 
@@ -167,6 +176,7 @@ export function createAudioEngine(
   const playback = createPlaybackQueue(playAudio);
 
   async function stopCapture(): Promise<void> {
+    captureAttempt.cancel();
     refs.started = false;
 
     try {
@@ -201,12 +211,18 @@ export function createAudioEngine(
     }
   }
 
+  const unsubscribeMicrophoneDisabled = subscribeMicrophoneDisabled(() => {
+    void stopCapture();
+  });
+
   return {
     async initialize() {
       await ensurePlaybackContext();
     },
 
     async destroy() {
+      destroyed = true;
+      unsubscribeMicrophoneDisabled();
       playback.destroy();
       await stopCapture();
 
@@ -218,8 +234,14 @@ export function createAudioEngine(
     },
 
     async startCapture() {
-      if (refs.started) {
+      if (refs.started && isMicrophoneEnabled()) {
         return;
+      }
+      const attemptId = captureAttempt.next();
+      await requireMicrophoneEnabled();
+      captureAttempt.assertCurrent(attemptId);
+      if (destroyed) {
+        throw new AttemptCancelledError();
       }
 
       const missingNavigator =
@@ -245,6 +267,7 @@ export function createAudioEngine(
 
       try {
         const context = await ensureCaptureContext();
+        captureAttempt.assertCurrent(attemptId);
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
@@ -253,13 +276,18 @@ export function createAudioEngine(
             autoGainControl: true,
           },
         });
+        if (!captureAttempt.isCurrent(attemptId) || destroyed || !isMicrophoneEnabled()) {
+          stream.getTracks().forEach((track) => track.stop());
+          throw new AttemptCancelledError();
+        }
+        refs.stream = stream;
         const source = context.createMediaStreamSource(stream);
         const processor = context.createScriptProcessor(4096, 1, 1);
         const gain = context.createGain();
         gain.gain.value = 0;
 
         processor.onaudioprocess = (event) => {
-          if (!refs.started) {
+          if (!refs.started || !captureAttempt.isCurrent(attemptId) || !isMicrophoneEnabled()) {
             return;
           }
 
@@ -273,7 +301,7 @@ export function createAudioEngine(
           const normalized = Math.min(1, Math.max(0, rms * 2));
           callbacks.onVolumeLevel(normalized);
 
-          if (refs.muted) {
+          if (refs.muted || !captureAttempt.isCurrent(attemptId) || !isMicrophoneEnabled()) {
             return;
           }
 
@@ -291,7 +319,9 @@ export function createAudioEngine(
         refs.processor = processor;
         refs.gain = gain;
       } catch (error) {
-        await stopCapture();
+        if (captureAttempt.isCurrent(attemptId)) {
+          await stopCapture();
+        }
         const wrapped = error instanceof Error ? error : new Error(String(error));
         callbacks.onError?.(wrapped);
         throw wrapped;

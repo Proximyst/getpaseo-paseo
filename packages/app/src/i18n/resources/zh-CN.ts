@@ -1543,6 +1543,7 @@ export const zhCN: TranslationResources = {
         unexpectedState: "意外的通知权限状态：{{state}}",
       },
       microphone: {
+        disabled: "已在应用设置中关闭麦克风访问。",
         webOnly: "桌面麦克风状态仅在 web runtime 中可用。",
         navigatorUnavailable: "此环境中 Navigator 不可用。",
         granted: "已授予麦克风访问权限。",
@@ -2308,6 +2309,17 @@ export const zhCN: TranslationResources = {
     },
     notifications: {
       title: "通知",
+      enabled: "通知已启用",
+      disabled: "通知已禁用",
+      enabledHint: "控制此 Paseo 安装实例的通知。",
+      disable: "禁用通知",
+      enable: "启用通知",
+      saveFailed: "无法更改通知设置。请重试。",
+      systemSettings: "系统通知权限",
+      nativeDisableHint:
+        "如需立即彻底屏蔽所有通知，请在系统设置中关闭 Paseo 的通知权限。离线或旧版主机以及已发送的通知仍可能送达。重新启用通知时，请在系统设置中恢复权限。",
+      openSettings: "打开系统设置",
+      openSettingsFailed: "无法打开系统设置。",
       permission: "通知权限",
       refreshAccessibility: "刷新通知权限",
       playSound: "播放声音",
@@ -2414,6 +2426,10 @@ export const zhCN: TranslationResources = {
     general: {
       title: "通用",
       sending: "发送",
+      microphone: {
+        label: "麦克风",
+        description: "允许听写和语音模式使用麦克风",
+      },
       setup: {
         label: "首次设置",
         description: "重新设置外观、提供方、项目和手机配对",

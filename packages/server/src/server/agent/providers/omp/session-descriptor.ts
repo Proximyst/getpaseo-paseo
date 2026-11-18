@@ -10,6 +10,7 @@ import type {
 } from "../../agent-sdk-types.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 import { createRealpathAwarePathMatcher } from "../../../../utils/path.js";
+import { assertOmpInteractiveSessionFile, isOmpAdvisorSessionFile } from "./advisor-session.js";
 
 const OMP_CONFIG_DIR_NAME = ".omp";
 const OMP_SESSION_DIR_ENV = "PI_CODING_AGENT_SESSION_DIR";
@@ -75,7 +76,9 @@ export async function listOmpImportableSessions(
   options: OmpSessionDescriptorOptions = {},
 ): Promise<ImportableProviderSession[]> {
   const sessionsDir = await resolveOmpSessionsDir(options);
-  const files = await walkJsonlFiles(sessionsDir);
+  const files = (await walkJsonlFiles(sessionsDir)).filter(
+    (file) => !isOmpAdvisorSessionFile(file),
+  );
   const matchesCwd = options.cwd ? createRealpathAwarePathMatcher(options.cwd) : null;
   const limit = options.limit ?? 20;
   const ranked = await rankSessionFilesByMtime(files);
@@ -116,6 +119,7 @@ export async function readOmpImportSessionConfig(
 ): Promise<OmpImportSessionConfig> {
   const filePath = await resolveOmpSessionFile(handle, options);
   if (!filePath) return {};
+  assertOmpInteractiveSessionFile(filePath);
   const descriptor = await readOmpSessionDescriptor(filePath);
   if (!descriptor) return {};
   return toOmpImportSessionConfig(descriptor);
