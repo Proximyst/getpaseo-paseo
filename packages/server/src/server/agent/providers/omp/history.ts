@@ -11,6 +11,7 @@ import type { OmpBridgedToolIdentity } from "./mcp-bridge.js";
 import { formatOmpSubagentTitle } from "./subagent-title.js";
 import { mapOmpTodoPhases } from "./todo-mapper.js";
 import { OmpTodoPhaseSchema } from "./rpc-types.js";
+import { OmpAdvisorIndex, type AdvisorRefreshError } from "./advisor-index.js";
 
 interface OmpSessionEntry {
   type?: string;
@@ -73,6 +74,9 @@ export async function* streamOmpHistory(input: {
   provider: AgentProvider;
   bridgedTools?: ReadonlyMap<string, OmpBridgedToolIdentity>;
   visitedSessionFiles?: Set<string>;
+  advisorIndex?: OmpAdvisorIndex;
+  advisorParentSubagentId?: string;
+  onAdvisorError: (failure: AdvisorRefreshError) => void;
 }): AsyncGenerator<AgentStreamEvent> {
   if (!input.sessionFile) {
     return;
@@ -131,14 +135,30 @@ export async function* streamOmpHistory(input: {
     }
   }
   for (const transcript of readSubagentTranscripts(messages, input.sessionFile)) {
-    yield* replaySubagentTranscript(transcript, input.provider, visitedSessionFiles);
+    yield* replaySubagentTranscript(
+      transcript,
+      input.provider,
+      visitedSessionFiles,
+      input.onAdvisorError,
+      input.advisorIndex,
+    );
   }
+  const advisors = await (input.advisorIndex ?? new OmpAdvisorIndex()).refresh(
+    input.sessionFile,
+    readActiveOmpEntryChain,
+    true,
+    input.advisorParentSubagentId,
+  );
+  for (const failure of advisors.errors) input.onAdvisorError(failure);
+  yield* advisors.events;
 }
 
 async function* replaySubagentTranscript(
   transcript: OmpSubagentTranscript,
   provider: AgentProvider,
   visitedSessionFiles: Set<string>,
+  onAdvisorError: (failure: AdvisorRefreshError) => void,
+  advisorIndex?: OmpAdvisorIndex,
 ): AsyncGenerator<AgentStreamEvent> {
   const childEntries = await readActiveOmpEntryChain(transcript.sessionFile).catch(
     (error: unknown) => {
@@ -153,6 +173,9 @@ async function* replaySubagentTranscript(
     sessionFile: transcript.sessionFile,
     provider,
     visitedSessionFiles,
+    onAdvisorError,
+    advisorIndex,
+    advisorParentSubagentId: transcript.id,
   })) {
     if (event.type === "timeline") {
       yield {

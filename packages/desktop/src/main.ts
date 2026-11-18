@@ -49,10 +49,7 @@ import { setupDarwinCompositorWatchdog } from "./window/compositor-watchdog/inde
 import { showWindowWhenReady } from "./window/show-when-ready.js";
 import { resolveDesktopWindowChromeMode, windowChromeModeArgument } from "./window/chrome.js";
 import { registerDialogHandlers } from "./features/dialogs.js";
-import {
-  registerNotificationHandlers,
-  ensureNotificationCenterRegistration,
-} from "./features/notifications.js";
+import { registerNotificationHandlers } from "./features/notifications.js";
 import { createExternalUrlOpener } from "./features/opener.js";
 import { createBrowserCaptureService } from "./features/browser-capture.js";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
@@ -964,7 +961,6 @@ async function bootstrap(): Promise<void> {
       });
     },
   });
-  ensureNotificationCenterRegistration();
   registerDaemonManager();
   registerWindowManager({ mode: DESKTOP_WINDOW_CHROME_MODE });
   registerDialogHandlers();

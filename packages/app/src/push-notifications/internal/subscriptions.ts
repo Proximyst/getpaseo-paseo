@@ -4,10 +4,25 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { z } from "zod";
 import { readValidatedString } from "@/storage/validated-storage";
+import { areNotificationsEnabled } from "@/hooks/use-settings/notifications";
 import type { RevokePushNotificationsInput, StartPushNotificationsInput } from "./types";
 
 const STORAGE_PREFIX = "@paseo:expo-push-token:";
 const ExpoPushTokenSchema = z.string().trim().min(1);
+const subscriptionOperations = new Map<string, Promise<void>>();
+
+/** Token writes, registration, and revocation must stay ordered across effect restarts. */
+function queueSubscriptionOperation(serverId: string, operation: () => Promise<void>): Promise<void> {
+  const previous = subscriptionOperations.get(serverId) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(operation);
+  subscriptionOperations.set(serverId, next);
+  void next
+    .finally(() => {
+      if (subscriptionOperations.get(serverId) === next) subscriptionOperations.delete(serverId);
+    })
+    .catch(() => undefined);
+  return next;
+}
 
 function storageKey(serverId: string): string {
   return `${STORAGE_PREFIX}${serverId}`;
@@ -20,21 +35,19 @@ function getExpoProjectId(): string | null {
   return fromExtra.success ? fromExtra.data : null;
 }
 
-async function ensurePushPermission(): Promise<boolean> {
+async function ensurePushPermission(isActive: () => boolean): Promise<boolean> {
   const existing = await Notifications.getPermissionsAsync();
+  if (!isActive()) return false;
   if (existing.status === Notifications.PermissionStatus.GRANTED) return true;
   if (!existing.canAskAgain) return false;
   const requested = await Notifications.requestPermissionsAsync();
-  return requested.status === Notifications.PermissionStatus.GRANTED;
+  return isActive() && requested.status === Notifications.PermissionStatus.GRANTED;
 }
 
-async function resolveToken(serverId: string): Promise<string | null> {
+async function resolveToken(serverId: string, isActive: () => boolean): Promise<string | null> {
   const key = storageKey(serverId);
   const cached = await readValidatedString(AsyncStorage, key, ExpoPushTokenSchema);
-  if (!(await ensurePushPermission())) {
-    await AsyncStorage.removeItem(key);
-    return null;
-  }
+  if (!isActive() || !(await ensurePushPermission(isActive))) return null;
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
@@ -42,6 +55,7 @@ async function resolveToken(serverId: string): Promise<string | null> {
       importance: Notifications.AndroidImportance.DEFAULT,
     });
   }
+  if (!isActive()) return null;
 
   const projectId = getExpoProjectId();
   if (!projectId) {
@@ -59,23 +73,25 @@ async function resolveToken(serverId: string): Promise<string | null> {
 export function startSubscription(input: StartPushNotificationsInput): () => void {
   let stopped = false;
   let token: string | null = null;
-  const register = () => {
-    if (!stopped && token && input.client.isConnected) {
-      input.client.registerPushToken(token);
-    }
+  const isActive = () => !stopped && input.enabled && areNotificationsEnabled();
+  const synchronize = () => {
+    void queueSubscriptionOperation(input.serverId, async () => {
+      if (stopped) return;
+      if (isActive()) {
+        token ??= await resolveToken(input.serverId, isActive);
+        // The preference or effect may have changed while permission/token APIs were pending.
+        if (isActive() && token && input.client.isConnected) {
+          input.client.registerPushToken(token);
+        }
+      } else if (!areNotificationsEnabled()) {
+        await revokeStoredToken(input, false);
+      }
+    }).catch((error) => console.warn("[PushNotifications] Failed to sync push subscription", error));
   };
 
-  void resolveToken(input.serverId)
-    .then((resolved) => {
-      if (stopped) return undefined;
-      token = resolved;
-      register();
-      return undefined;
-    })
-    .catch((error) => console.warn("[PushNotifications] Failed to register push token", error));
-
+  synchronize();
   const unsubscribe = input.client.subscribeConnectionStatus((state) => {
-    if (state.status === "connected") register();
+    if (state.status === "connected") synchronize();
   });
 
   return () => {
@@ -84,19 +100,29 @@ export function startSubscription(input: StartPushNotificationsInput): () => voi
   };
 }
 
-export async function revokeSubscription(input: RevokePushNotificationsInput): Promise<void> {
+async function revokeStoredToken(
+  input: RevokePushNotificationsInput,
+  forgetOnFailure: boolean,
+): Promise<void> {
   const key = storageKey(input.serverId);
   const token = await readValidatedString(AsyncStorage, key, ExpoPushTokenSchema);
+  if (!token) return;
+  let revoked = false;
   if (
-    token &&
     input.client?.isConnected &&
     input.client.getLastServerInfoMessage()?.features?.pushTokenRevocation === true
   ) {
     try {
       await input.client.unregisterPushToken(token);
+      revoked = true;
     } catch (error) {
       console.warn("[PushNotifications] Failed to revoke push token", error);
     }
   }
-  await AsyncStorage.removeItem(key);
+  // Keep disabled subscriptions available for a later reconnect/restart retry.
+  if (revoked || forgetOnFailure) await AsyncStorage.removeItem(key);
+}
+
+export function revokeSubscription(input: RevokePushNotificationsInput): Promise<void> {
+  return queueSubscriptionOperation(input.serverId, () => revokeStoredToken(input, true));
 }

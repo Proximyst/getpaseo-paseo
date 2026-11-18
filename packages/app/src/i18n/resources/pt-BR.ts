@@ -2366,6 +2366,17 @@ export const ptBR: TranslationResources = {
     },
     notifications: {
       title: "Notificações",
+      enabled: "Notificações ativadas",
+      disabled: "Notificações desativadas",
+      enabledHint: "Controle as notificações desta instalação do Paseo.",
+      disable: "Desativar notificações",
+      enable: "Ativar notificações",
+      saveFailed: "Não foi possível alterar as configurações de notificações. Tente novamente.",
+      systemSettings: "Permissão de notificações do sistema",
+      nativeDisableHint:
+        "Para bloquear todas as notificações imediatamente, desative a permissão de notificações do Paseo nas configurações do sistema. Hosts offline ou antigos e notificações já enviadas ainda podem entregar notificações. Restaure a permissão lá ao reativar as notificações.",
+      openSettings: "Abrir configurações do sistema",
+      openSettingsFailed: "Não foi possível abrir as configurações do sistema.",
       permission: "Permissão de notificações",
       refreshAccessibility: "Atualizar permissão de notificações",
       playSound: "Reproduzir som",

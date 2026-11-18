@@ -2355,6 +2355,17 @@ export const ja: TranslationResources = {
     },
     notifications: {
       title: "通知",
+      enabled: "通知は有効です",
+      disabled: "通知は無効です",
+      enabledHint: "この端末にインストールされた Paseo の通知を設定します。",
+      disable: "通知を無効にする",
+      enable: "通知を有効にする",
+      saveFailed: "通知設定を変更できませんでした。もう一度お試しください。",
+      systemSettings: "システムの通知権限",
+      nativeDisableHint:
+        "すべての通知を直ちにブロックするには、システム設定で Paseo の通知権限をオフにしてください。オフラインまたは古いホストからの通知や、送信済みの通知は引き続き届く場合があります。通知を再度有効にする際は、システム設定で権限も戻してください。",
+      openSettings: "システム設定を開く",
+      openSettingsFailed: "システム設定を開けませんでした。",
       permission: "通知の権限",
       refreshAccessibility: "通知の権限を更新",
       playSound: "サウンドを再生",

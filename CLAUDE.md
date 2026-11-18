@@ -118,6 +118,13 @@ When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: write
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
+## Pull requests
+
+- Open every PR within the fork, `Proximyst/getpaseo-paseo`. Never open a PR against upstream, `getpaseo/paseo`.
+- The PR's base repository and head repository must both be `Proximyst/getpaseo-paseo`. Push the feature branch to `fork` and target the fork's `main` branch.
+- Pass `--repo Proximyst/getpaseo-paseo --base main --head <branch>` to `gh pr create`; do not rely on GitHub CLI's default repository.
+- Do not include `@codex review` or `@cursor review` in PR descriptions or comments. Those review integrations are not enabled in this repository.
+
 ## Release branches
 
 Merge normal PRs into `main`, including while a beta soaks or a release is being finalized. Each

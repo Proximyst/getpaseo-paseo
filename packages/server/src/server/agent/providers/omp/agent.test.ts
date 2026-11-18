@@ -1,6 +1,6 @@
 import { describe, expect, onTestFinished, test } from "vitest";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -15,6 +15,7 @@ import { OmpHarness } from "./test-utils/omp-harness.js";
 import { OmpAgentClient } from "./agent.js";
 import { FakeOmp } from "./test-utils/fake-omp.js";
 import { createTestLogger } from "../../../../test-utils/test-logger.js";
+import { OmpAdvisorSessionError } from "./advisor-session.js";
 
 const TURN_LIFECYCLE_EVENTS = new Set<AgentStreamEvent["type"]>([
   "turn_started",
@@ -38,6 +39,30 @@ const ABORTED_TERMINAL_RESPONSE: OmpAgentMessage = {
   stopReason: "aborted",
   errorMessage: "Interrupted by user",
 };
+
+test("advisor transcripts reject interactive resume before launch but remain readable as history", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-advisor-resume-"));
+  onTestFinished(() => rm(root, { recursive: true, force: true }));
+  const sessionFile = path.join(root, "__advisor.primary-advisor.jsonl");
+  await writeFile(sessionFile, [
+    { type: "session", id: "ordinary-id", cwd: root },
+    { type: "message", id: "review", parentId: null, message: { role: "assistant", content: [{ type: "text", text: "Saved advice" }] } },
+  ].map((entry) => JSON.stringify(entry)).join("\n"));
+  const runtime = new FakeOmp();
+  const client = new OmpAgentClient({ logger: createTestLogger(), runtime });
+  const handle = { provider: "omp" as const, sessionId: "ordinary-id", nativeHandle: sessionFile, metadata: { cwd: root } };
+  await expect(client.resumeSession(handle)).rejects.toBeInstanceOf(OmpAdvisorSessionError);
+  expect(runtime.recordedLaunches).toHaveLength(0);
+  const session = await client.resumeSession(handle, undefined, undefined, { purpose: "history" });
+  onTestFinished(() => session.close());
+  const events = [];
+  for await (const event of session.streamHistory()) events.push(event);
+  expect(events).toContainEqual(expect.objectContaining({
+    type: "timeline",
+    item: expect.objectContaining({ type: "assistant_message", text: "Saved advice" }),
+  }));
+  expect(runtime.recordedLaunches).toHaveLength(0);
+});
 
 test("an idle follow-up is submitted as a prompt so OMP can start a turn", async () => {
   const runtime = new FakeOmp();

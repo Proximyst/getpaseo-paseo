@@ -1,6 +1,7 @@
-/** Storage keys live here so `storage` and `migrations` can share them without importing each other. */
+/** Settings keys live here so storage, migrations, and notification gates can share them. */
 
 export const APP_SETTINGS_KEY = "@paseo:app-settings";
+export const APP_SETTINGS_QUERY_KEY = ["app-settings"];
 export const LEGACY_SETTINGS_KEY = "@paseo:settings";
 
 /**

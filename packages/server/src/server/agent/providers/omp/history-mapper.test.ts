@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -10,6 +10,11 @@ import type { OmpAgentMessage } from "./rpc-types.js";
 import { FakeOmp } from "./test-utils/fake-omp.js";
 import { OMP_HISTORY_MAPPER_HOOKS } from "./history-hooks.js";
 import { readActiveOmpEntryChain, readOmpHistoryTodoState, streamOmpHistory } from "./history.js";
+import { OmpAdvisorIndex, type AdvisorRefreshError } from "./advisor-index.js";
+
+function unexpectedAdvisorError({ file, error }: AdvisorRefreshError): never {
+  throw new Error(`Unexpected advisor history failure: ${file}`, { cause: error });
+}
 
 async function collectHistory(
   messages: OmpAgentMessage[],
@@ -26,6 +31,426 @@ async function collectHistory(
   }
   return events;
 }
+
+test("discovers saved advisor transcripts and appends each finalized record only once", async () => {
+  const root = await mkdtemp(join(tmpdir(), "paseo-omp-advisors-"));
+  try {
+    const sessionFile = join(root, "primary.jsonl");
+    const directory = join(root, "primary");
+    await mkdir(directory);
+    await writeFile(sessionFile, JSON.stringify({ type: "session", id: "primary" }));
+    const advisorFile = join(directory, "__advisor.security-review.jsonl");
+    const entries = [
+      { type: "session", id: "ordinary-session-id", cwd: root },
+      {
+        type: "message", id: "update", parentId: null,
+        message: { role: "user", content: "Review this change", synthetic: true, attribution: "agent" },
+      },
+      {
+        type: "message", id: "review", parentId: "update", timestamp: "2026-11-17T12:00:00Z",
+        message: {
+          role: "assistant", provider: "anthropic", model: "reviewer", stopReason: "toolUse",
+          content: [
+            { type: "thinking", thinking: "Inspect the boundary" },
+            { type: "toolCall", id: "read-1", name: "read", arguments: { path: "src/auth.ts" } },
+          ],
+        },
+      },
+      {
+        type: "message", id: "read-result", parentId: "review",
+        message: {
+          role: "toolResult", toolCallId: "read-1", toolName: "read",
+          content: [{ type: "text", text: "Boundary checked" }],
+        },
+      },
+    ];
+    await writeFile(advisorFile, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+    await writeFile(join(directory, "unrelated.jsonl"), JSON.stringify(entries[0]));
+    const index = new OmpAdvisorIndex();
+    const replay = [];
+    for await (const event of streamOmpHistory({ sessionFile, provider: "omp", advisorIndex: index, onAdvisorError: unexpectedAdvisorError })) {
+      replay.push(event);
+    }
+    const id = `omp-advisor:${advisorFile}`;
+    expect(replay).toContainEqual(expect.objectContaining({
+      type: "provider_subagent",
+      event: expect.objectContaining({
+        type: "upsert", id, title: "Advisor · security-review",
+        subtitle: expect.stringContaining("anthropic/reviewer"),
+        status: "completed", parentSubagentId: null, toolCallId: null,
+      }),
+    }));
+    expect(replay).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({ type: "timeline", id, item: { type: "reasoning", text: "Inspect the boundary" } }),
+    }));
+    expect(replay).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({
+        type: "timeline", id,
+        item: expect.objectContaining({ type: "tool_call", callId: "read-1", status: "completed" }),
+      }),
+    }));
+    expect(await index.refreshAll(sessionFile, readActiveOmpEntryChain)).toEqual({ events: [], errors: [] });
+    await appendFile(advisorFile, JSON.stringify({
+      type: "message", id: "failed-review", parentId: "read-result",
+      message: {
+        role: "assistant", provider: "anthropic", model: "reviewer",
+        content: [{ type: "text", text: "Could not complete review" }],
+        stopReason: "error", errorMessage: "Quota exhausted",
+      },
+    }) + "\n");
+    const { events: updated, errors } = await index.refreshAll(sessionFile, readActiveOmpEntryChain);
+    expect(errors).toEqual([]);
+    expect(updated).toHaveLength(2);
+    expect(updated[0]).toMatchObject({ event: { type: "upsert", id, status: "failed" } });
+    expect(updated[1]).toMatchObject({
+      event: { type: "timeline", id, item: { type: "assistant_message", text: "Could not complete review" } },
+    });
+    expect(await index.refreshAll(sessionFile, readActiveOmpEntryChain)).toEqual({ events: [], errors: [] });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test.each(["sidecar", "owner"] as const)(
+  "delivers successful advisors across a later %s read failure and recovers exactly once",
+  async (failureScope) => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-omp-advisor-failure-"));
+    try {
+      const sessionFile = join(root, "primary.jsonl");
+      const directory = join(root, "primary");
+      const childFile = join(directory, "child.jsonl");
+      const childDirectory = join(directory, "child");
+      await mkdir(failureScope === "owner" ? childDirectory : directory, { recursive: true });
+      const firstFile = join(directory, "__advisor.a.jsonl");
+      const failedFile = join(
+        failureScope === "owner" ? childDirectory : directory,
+        "__advisor.b.jsonl",
+      );
+      const lastFile = join(
+        failureScope === "owner" ? childDirectory : directory,
+        "__advisor.c.jsonl",
+      );
+      for (const file of [firstFile, failedFile, lastFile]) await writeFile(file, "");
+      const readError = Object.assign(new Error("Advisor read denied"), { code: "EACCES" });
+      let failing = true;
+      const reads: string[] = [];
+      const readEntries = async (file: string) => {
+        reads.push(file);
+        if (file === failedFile && failing) throw readError;
+        return [{
+          type: "message",
+          id: "answer",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: file }],
+            stopReason: "stop",
+          },
+        }];
+      };
+      const index = new OmpAdvisorIndex();
+      if (failureScope === "owner") index.trackSession(childFile, "child");
+      const first = await index.refreshAll(sessionFile, readEntries);
+      expect(reads).toEqual([firstFile, failedFile, lastFile]);
+      expect(first.errors).toEqual([{ file: failedFile, error: readError }]);
+      expect(first.events.flatMap((event) =>
+        event.type === "provider_subagent" && event.event.type === "timeline"
+          ? [event.event]
+          : [],
+      )).toEqual([
+        expect.objectContaining({
+          id: `omp-advisor:${firstFile}`,
+          item: expect.objectContaining({ type: "assistant_message", text: firstFile }),
+        }),
+        expect.objectContaining({
+          id: `omp-advisor:${lastFile}`,
+          item: expect.objectContaining({ type: "assistant_message", text: lastFile }),
+        }),
+      ]);
+
+      reads.length = 0;
+      const stillFailing = await index.refreshAll(sessionFile, readEntries);
+      expect(stillFailing).toEqual({
+        events: [],
+        errors: [{ file: failedFile, error: readError }],
+      });
+      expect(reads).toEqual([failedFile]);
+
+      failing = false;
+      reads.length = 0;
+      const recovered = await index.refreshAll(sessionFile, readEntries);
+      expect(recovered.errors).toEqual([]);
+      expect(reads).toEqual([failedFile]);
+      expect(recovered.events).toHaveLength(2);
+      expect(recovered.events[0]).toMatchObject({
+        event: {
+          type: "upsert",
+          id: `omp-advisor:${failedFile}`,
+          parentSubagentId: failureScope === "owner" ? "child" : null,
+        },
+      });
+      expect(recovered.events.flatMap((event) =>
+        event.type === "provider_subagent" && event.event.type === "timeline"
+          ? [event.event]
+          : [],
+      )).toEqual([
+        expect.objectContaining({
+          id: `omp-advisor:${failedFile}`,
+          item: expect.objectContaining({ type: "assistant_message", text: failedFile }),
+        }),
+      ]);
+      expect(await index.refreshAll(sessionFile, readEntries)).toEqual({ events: [], errors: [] });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test("continues past an unreadable owner directory and delivers its advisors after recovery", async () => {
+  const root = await mkdtemp(join(tmpdir(), "paseo-omp-advisor-owner-failure-"));
+  try {
+    const sessionFile = join(root, "primary.jsonl");
+    const directory = join(root, "primary");
+    const failedDirectory = join(directory, "failed-child");
+    const lastDirectory = join(directory, "last-child");
+    await mkdir(lastDirectory, { recursive: true });
+    await writeFile(failedDirectory, "Not a directory");
+    const firstFile = join(directory, "__advisor.jsonl");
+    const lastFile = join(lastDirectory, "__advisor.jsonl");
+    await writeFile(firstFile, "");
+    await writeFile(lastFile, "");
+    const readEntries = async (file: string) => [{
+      type: "message",
+      id: "answer",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: file }],
+        stopReason: "stop",
+      },
+    }];
+    const index = new OmpAdvisorIndex();
+    index.trackSession(`${failedDirectory}.jsonl`, "failed-child");
+    index.trackSession(`${lastDirectory}.jsonl`, "last-child");
+    const first = await index.refreshAll(sessionFile, readEntries);
+    expect(first.errors).toEqual([{
+      file: failedDirectory,
+      error: expect.objectContaining({ code: "ENOTDIR" }),
+    }]);
+    expect(first.events.filter((event) =>
+      event.type === "provider_subagent" && event.event.type === "timeline",
+    )).toEqual([
+      expect.objectContaining({ event: expect.objectContaining({ id: `omp-advisor:${firstFile}` }) }),
+      expect.objectContaining({ event: expect.objectContaining({ id: `omp-advisor:${lastFile}` }) }),
+    ]);
+
+    await rm(failedDirectory);
+    await mkdir(failedDirectory);
+    const recoveredFile = join(failedDirectory, "__advisor.jsonl");
+    await writeFile(recoveredFile, "");
+    const recovered = await index.refreshAll(sessionFile, readEntries);
+    expect(recovered.errors).toEqual([]);
+    expect(recovered.events).toHaveLength(2);
+    expect(recovered.events[0]).toMatchObject({
+      event: { type: "upsert", id: `omp-advisor:${recoveredFile}`, parentSubagentId: "failed-child" },
+    });
+    expect(recovered.events[1]).toMatchObject({
+      event: { type: "timeline", id: `omp-advisor:${recoveredFile}` },
+    });
+    expect(await index.refreshAll(sessionFile, readEntries)).toEqual({ events: [], errors: [] });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("nests task-owned advisors under their task without colliding with primary advisors", async () => {
+  const root = await mkdtemp(join(tmpdir(), "paseo-omp-nested-advisors-"));
+  try {
+    const sessionFile = join(root, "primary.jsonl");
+    const directory = join(root, "primary");
+    await mkdir(join(directory, "child-1"), { recursive: true });
+    const primaryEntries = [
+      { type: "session", id: "root" },
+      {
+        type: "message", id: "task", parentId: null,
+        message: { role: "assistant", content: [{ type: "toolCall", id: "task-1", name: "task", arguments: { agent: "explore" } }] },
+      },
+      {
+        type: "message", id: "result", parentId: "task",
+        message: { role: "toolResult", toolCallId: "task-1", toolName: "task", content: [], details: { results: [{ id: "child-1", agent: "explore", exitCode: 0 }] } },
+      },
+    ];
+    await writeFile(sessionFile, primaryEntries.map((entry) => JSON.stringify(entry)).join("\n"));
+    await writeFile(join(directory, "child-1.jsonl"), JSON.stringify({ type: "session", id: "child-1" }));
+    const advisor = [
+      { type: "session", id: "unmarked" },
+      { type: "message", id: "answer", parentId: null, message: { role: "assistant", content: [{ type: "text", text: "Reviewed" }], stopReason: "stop" } },
+    ].map((entry) => JSON.stringify(entry)).join("\n");
+    const primaryAdvisor = join(directory, "__advisor.jsonl");
+    const childAdvisor = join(directory, "child-1", "__advisor.jsonl");
+    await writeFile(primaryAdvisor, advisor);
+    await writeFile(childAdvisor, advisor);
+    const events = [];
+    for await (const event of streamOmpHistory({ sessionFile, provider: "omp", onAdvisorError: unexpectedAdvisorError })) events.push(event);
+    expect(events).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({ type: "upsert", id: `omp-advisor:${primaryAdvisor}`, parentSubagentId: null }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({ type: "upsert", id: `omp-advisor:${childAdvisor}`, parentSubagentId: "child-1" }),
+    }));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test.each([false, true])(
+  "fully collects buffered history despite nested advisor failures (supplied visited set: %s)",
+  async (supplyVisitedSet) => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-omp-nested-advisor-failure-"));
+    try {
+      const sessionFile = join(root, "primary.jsonl");
+      const directory = join(root, "primary");
+      await mkdir(directory);
+      const failedDirectory = join(directory, "failed-child");
+      const canceledDirectory = join(directory, "canceled-child");
+      // These files make advisor discovery fail with ENOTDIR without breaking task transcripts.
+      await writeFile(failedDirectory, "Not a directory");
+      await writeFile(canceledDirectory, "Not a directory");
+      const writeEntries = (file: string, entries: object[]) =>
+        writeFile(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
+      await writeEntries(sessionFile, [
+        { type: "session", id: "root" },
+        {
+          type: "message", id: "task", parentId: null,
+          message: {
+            role: "assistant",
+            content: [
+              { type: "text", text: "Root history" },
+              { type: "toolCall", id: "task-1", name: "task", arguments: { agent: "task" } },
+            ],
+          },
+        },
+        {
+          type: "message", id: "result", parentId: "task",
+          message: {
+            role: "toolResult", toolCallId: "task-1", toolName: "task", content: [],
+            details: {
+              results: [
+                { id: "failed-child", exitCode: 2 },
+                { id: "canceled-child", aborted: true },
+                { id: "later-child", exitCode: 0 },
+              ],
+            },
+          },
+        },
+      ]);
+      for (const id of ["failed-child", "canceled-child", "later-child"]) {
+        await writeEntries(join(directory, `${id}.jsonl`), [{
+          type: "message", id: "answer", parentId: null,
+          message: {
+            role: "assistant", content: [{ type: "text", text: `${id} history` }],
+            stopReason: "stop",
+          },
+        }]);
+      }
+      const primaryAdvisor = join(directory, "__advisor.jsonl");
+      await writeEntries(primaryAdvisor, [{
+        type: "message", id: "review", parentId: null,
+        message: {
+          role: "assistant", content: [{ type: "text", text: "Root advisor history" }],
+          stopReason: "stop",
+        },
+      }]);
+
+      const errors: AdvisorRefreshError[] = [];
+      // AgentManager commits only after the entire stream has completed successfully.
+      const collectReplay = async () => {
+        const events: AgentStreamEvent[] = [];
+        for await (const event of streamOmpHistory({
+          sessionFile,
+          provider: "omp",
+          advisorIndex: new OmpAdvisorIndex(),
+          onAdvisorError: (failure) => errors.push(failure),
+          ...(supplyVisitedSet ? { visitedSessionFiles: new Set<string>() } : {}),
+        })) {
+          events.push(event);
+        }
+        return events;
+      };
+      const events = await collectReplay();
+
+      expect(events).toContainEqual(expect.objectContaining({
+        type: "timeline",
+        item: expect.objectContaining({ type: "assistant_message", text: "Root history" }),
+      }));
+      const subagentEvents = events.flatMap((event) =>
+        event.type === "provider_subagent" ? [event.event] : [],
+      );
+      expect(subagentEvents.flatMap((event) =>
+        event.type === "upsert" ? [{ id: event.id, status: event.status }] : [],
+      )).toEqual([
+        { id: "failed-child", status: "running" },
+        { id: "failed-child", status: "failed" },
+        { id: "canceled-child", status: "running" },
+        { id: "canceled-child", status: "canceled" },
+        { id: "later-child", status: "running" },
+        { id: "later-child", status: "completed" },
+        { id: `omp-advisor:${primaryAdvisor}`, status: "completed" },
+      ]);
+      expect(subagentEvents.filter((event) => event.type === "timeline")).toEqual([
+        expect.objectContaining({
+          id: "failed-child",
+          item: expect.objectContaining({ type: "assistant_message", text: "failed-child history" }),
+        }),
+        expect.objectContaining({
+          id: "canceled-child",
+          item: expect.objectContaining({ type: "assistant_message", text: "canceled-child history" }),
+        }),
+        expect.objectContaining({
+          id: "later-child",
+          item: expect.objectContaining({ type: "assistant_message", text: "later-child history" }),
+        }),
+        expect.objectContaining({
+          id: `omp-advisor:${primaryAdvisor}`,
+          item: expect.objectContaining({ type: "assistant_message", text: "Root advisor history" }),
+        }),
+      ]);
+      expect(events.at(-1)).toMatchObject({
+        type: "provider_subagent",
+        event: { type: "timeline", id: `omp-advisor:${primaryAdvisor}` },
+      });
+      expect(errors).toEqual([
+        { file: failedDirectory, error: expect.objectContaining({ code: "ENOTDIR", path: failedDirectory }) },
+        { file: canceledDirectory, error: expect.objectContaining({ code: "ENOTDIR", path: canceledDirectory }) },
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test("keeps ordinary session read failures fatal during buffered replay", async () => {
+  const root = await mkdtemp(join(tmpdir(), "paseo-omp-history-read-failure-"));
+  try {
+    const notDirectory = join(root, "not-directory");
+    await writeFile(notDirectory, "Not a directory");
+    const sessionFile = join(notDirectory, "session.jsonl");
+    const errors: AdvisorRefreshError[] = [];
+    const collectReplay = async () => {
+      const events: AgentStreamEvent[] = [];
+      for await (const event of streamOmpHistory({
+        sessionFile,
+        provider: "omp",
+        onAdvisorError: (failure) => errors.push(failure),
+      })) {
+        events.push(event);
+      }
+      return events;
+    };
+    await expect(collectReplay()).rejects.toMatchObject({ code: "ENOTDIR", path: sessionFile });
+    expect(errors).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 describe("OMP history mapper", () => {
   test("renders visible custom messages as completed tools with their type and content", async () => {
@@ -235,7 +660,7 @@ describe("OMP history mapper", () => {
         .join("\n"),
     );
     const events: AgentStreamEvent[] = [];
-    for await (const event of streamOmpHistory({ sessionFile, provider: "omp" }))
+    for await (const event of streamOmpHistory({ sessionFile, provider: "omp", onAdvisorError: unexpectedAdvisorError }))
       events.push(event);
     expect(events.map((event) => event.item)).toEqual([
       {
@@ -321,6 +746,7 @@ describe("OMP history mapper", () => {
     for await (const event of streamOmpHistory({
       sessionFile,
       provider: "omp",
+      onAdvisorError: unexpectedAdvisorError,
     }))
       events.push(event);
     expect(events.map((event) => event.item)).toEqual([
@@ -779,7 +1205,7 @@ describe("OMP history mapper", () => {
     );
 
     const events: AgentStreamEvent[] = [];
-    for await (const event of streamOmpHistory({ sessionFile, provider: "omp" })) {
+    for await (const event of streamOmpHistory({ sessionFile, provider: "omp", onAdvisorError: unexpectedAdvisorError })) {
       events.push(event);
     }
     expect(events.map((event) => event.item)).toEqual([
@@ -815,6 +1241,7 @@ describe("OMP history mapper", () => {
       sessionFile,
       runtimeSession,
       provider: "omp",
+      onAdvisorError: unexpectedAdvisorError,
     })) {
       selectedEvents.push(event);
     }
@@ -877,7 +1304,7 @@ describe("OMP history mapper", () => {
     );
 
     const events: AgentStreamEvent[] = [];
-    for await (const event of streamOmpHistory({ sessionFile, provider: "omp" })) {
+    for await (const event of streamOmpHistory({ sessionFile, provider: "omp", onAdvisorError: unexpectedAdvisorError })) {
       events.push(event);
     }
     expect(events.map((event) => event.item)).toEqual([
@@ -959,7 +1386,7 @@ describe("OMP history mapper", () => {
     );
 
     const events: AgentStreamEvent[] = [];
-    for await (const event of streamOmpHistory({ sessionFile, provider: "omp" })) {
+    for await (const event of streamOmpHistory({ sessionFile, provider: "omp", onAdvisorError: unexpectedAdvisorError })) {
       events.push(event);
     }
     expect(events.map((event) => event.item)).toEqual([
@@ -1202,7 +1629,7 @@ describe("OMP history mapper", () => {
     ]);
 
     const events: AgentStreamEvent[] = [];
-    for await (const event of streamOmpHistory({ sessionFile: parentFile, provider: "omp" })) {
+    for await (const event of streamOmpHistory({ sessionFile: parentFile, provider: "omp", onAdvisorError: unexpectedAdvisorError })) {
       events.push(event);
     }
     const subagentEvents = events.flatMap((event) =>
