@@ -16,6 +16,16 @@ Voice is local-first. You can run speech fully on-device, or choose OpenAI for s
 
 This keeps credentials and execution in your environment and avoids introducing a separate cloud-only voice stack.
 
+## Microphone access
+
+Turn off **Settings > General > Microphone** to disable microphone access in this app.
+This stops active dictation and voice mode, hides their controls, and prevents new
+recordings and microphone permission requests. The setting is saved on this device
+and applies to every connected host. Audio playback remains available.
+
+This does not revoke your operating system's microphone permission or change a
+host's speech provider configuration.
+
 ## Architecture
 
 - Speech I/O: STT and TTS providers per feature (`local` or `openai`)

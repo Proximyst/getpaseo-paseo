@@ -1557,6 +1557,7 @@ export const ar: TranslationResources = {
         unexpectedState: "حالة إذن الإعلام غير المتوقعة:{{state}}",
       },
       microphone: {
+        disabled: "تم إيقاف الوصول إلى الميكروفون في إعدادات التطبيق.",
         webOnly: "حالة ميكروفون سطح المكتب متاحة فقط في وقت تشغيل الويب.",
         navigatorUnavailable: "Navigator غير متوفر في هذه البيئة.",
         granted: "تم منح الوصول إلى الميكروفون.",
@@ -2474,6 +2475,10 @@ export const ar: TranslationResources = {
     general: {
       title: "عام",
       sending: "الإرسال",
+      microphone: {
+        label: "الميكروفون",
+        description: "السماح بالوصول إلى الميكروفون للإملاء والوضع الصوتي",
+      },
       setup: {
         label: "الإعداد الأولي",
         description: "أعد المرور على المظهر والمزوّدين والمشاريع وإقران الهاتف",

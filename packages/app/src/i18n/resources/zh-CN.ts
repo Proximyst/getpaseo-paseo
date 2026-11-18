@@ -1543,6 +1543,7 @@ export const zhCN: TranslationResources = {
         unexpectedState: "意外的通知权限状态：{{state}}",
       },
       microphone: {
+        disabled: "已在应用设置中关闭麦克风访问。",
         webOnly: "桌面麦克风状态仅在 web runtime 中可用。",
         navigatorUnavailable: "此环境中 Navigator 不可用。",
         granted: "已授予麦克风访问权限。",
@@ -2414,6 +2415,10 @@ export const zhCN: TranslationResources = {
     general: {
       title: "通用",
       sending: "发送",
+      microphone: {
+        label: "麦克风",
+        description: "允许听写和语音模式使用麦克风",
+      },
       setup: {
         label: "首次设置",
         description: "重新设置外观、提供方、项目和手机配对",

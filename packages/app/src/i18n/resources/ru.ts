@@ -1582,6 +1582,7 @@ export const ru: TranslationResources = {
         unexpectedState: "Неожиданное состояние разрешения на уведомления: {{state}}",
       },
       microphone: {
+        disabled: "Доступ к микрофону отключён в настройках приложения.",
         webOnly: "Статус микрофона доступен только в веб-среде выполнения.",
         navigatorUnavailable: "Объект Navigator недоступен в этой среде.",
         granted: "Доступ к микрофону разрешён.",
@@ -2475,6 +2476,10 @@ export const ru: TranslationResources = {
     general: {
       title: "Основные",
       sending: "Отправка",
+      microphone: {
+        label: "Микрофон",
+        description: "Разрешить доступ к микрофону для диктовки и голосового режима",
+      },
       setup: {
         label: "Первоначальная настройка",
         description: "Снова пройти оформление, провайдеры, проекты и привязку телефона",

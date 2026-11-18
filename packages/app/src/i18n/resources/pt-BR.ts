@@ -1586,6 +1586,7 @@ export const ptBR: TranslationResources = {
         unexpectedState: "Estado inesperado de permissão de notificação: {{state}}",
       },
       microphone: {
+        disabled: "O acesso ao microfone está desativado nas configurações do app.",
         webOnly: "O status do microfone desktop só está disponível no runtime web.",
         navigatorUnavailable: "Navigator não está disponível neste ambiente.",
         granted: "O acesso ao microfone foi concedido.",
@@ -2472,6 +2473,10 @@ export const ptBR: TranslationResources = {
     general: {
       title: "Geral",
       sending: "Envio",
+      microphone: {
+        label: "Microfone",
+        description: "Permitir acesso ao microfone para ditado e modo de voz",
+      },
       setup: {
         label: "Configuração inicial",
         description: "Rever aparência, provedores, projetos e pareamento do celular",

@@ -1595,6 +1595,7 @@ export const fr: TranslationResources = {
         unexpectedState: "État d’autorisation de notification inattendu : {{state}}",
       },
       microphone: {
+        disabled: "L’accès au microphone est désactivé dans les paramètres de l’application.",
         webOnly: "L’état du microphone n’est disponible que dans l’environnement web.",
         navigatorUnavailable: "L’objet navigator n’est pas disponible dans cet environnement.",
         granted: "L’accès au microphone est autorisé.",
@@ -2488,6 +2489,10 @@ export const fr: TranslationResources = {
     general: {
       title: "Général",
       sending: "Envoi",
+      microphone: {
+        label: "Microphone",
+        description: "Autoriser l’accès au microphone pour la dictée et le mode vocal",
+      },
       setup: {
         label: "Configuration initiale",
         description:

@@ -75,6 +75,7 @@ import { KeyboardShortcutsSection } from "@/screens/settings/keyboard-shortcuts-
 import { EditorSection } from "@/screens/settings/editor-section";
 import { FilesSection } from "@/screens/settings/files-section";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { CommunityLinks } from "@/components/community-links";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -328,6 +329,7 @@ function getActiveLocale(language: string | undefined): SupportedLocale {
 interface GeneralSectionProps {
   settings: AppSettings;
   handleLanguageChange: (language: AppLanguage) => void;
+  handleMicrophoneEnabledChange: (microphoneEnabled: boolean) => void;
 }
 
 interface LanguageMenuItemProps {
@@ -354,7 +356,11 @@ function LanguageMenuItem({ value, activeLocale, selected, onChange }: LanguageM
   );
 }
 
-function GeneralSection({ settings, handleLanguageChange }: GeneralSectionProps) {
+function GeneralSection({
+  settings,
+  handleLanguageChange,
+  handleMicrophoneEnabledChange,
+}: GeneralSectionProps) {
   const { t, i18n } = useTranslation();
   const activeLocale = getActiveLocale(i18n.language);
   const selectedLanguageOption = LANGUAGE_OPTIONS.find(
@@ -391,6 +397,20 @@ function GeneralSection({ settings, handleLanguageChange }: GeneralSectionProps)
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        </View>
+        <View style={settingsStyles.row}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>{t("settings.general.microphone.label")}</Text>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.general.microphone.description")}
+            </Text>
+          </View>
+          <Switch
+            value={settings.microphoneEnabled}
+            onValueChange={handleMicrophoneEnabledChange}
+            accessibilityLabel={t("settings.general.microphone.label")}
+            testID="microphone-enabled-toggle"
+          />
         </View>
         {isNative ? null : <ShowSetupAgainRow />}
       </View>
@@ -1155,6 +1175,13 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
     [updateSettings],
   );
 
+  const handleMicrophoneEnabledChange = useCallback(
+    (microphoneEnabled: boolean) => {
+      void updateSettings({ microphoneEnabled });
+    },
+    [updateSettings],
+  );
+
   const handlePlaybackTest = useCallback(async () => {
     if (!voiceAudioEngine || isPlaybackTestRunning) {
       return;
@@ -1338,7 +1365,11 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
         case "general":
           return (
             <>
-              <GeneralSection settings={settings} handleLanguageChange={handleLanguageChange} />
+              <GeneralSection
+                settings={settings}
+                handleLanguageChange={handleLanguageChange}
+                handleMicrophoneEnabledChange={handleMicrophoneEnabledChange}
+              />
               <SendingSection />
               {isDesktopApp ? <OpenLocationSection /> : null}
             </>

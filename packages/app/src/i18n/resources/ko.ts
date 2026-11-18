@@ -1566,6 +1566,7 @@ export const ko: TranslationResources = {
         unexpectedState: "예기치 않은 알림 권한 상태: {{state}}",
       },
       microphone: {
+        disabled: "앱 설정에서 마이크 접근이 꺼져 있습니다.",
         webOnly: "데스크톱 마이크 상태는 웹 런타임에서만 사용할 수 있습니다.",
         navigatorUnavailable: "이 환경에서는 Navigator를 사용할 수 없습니다.",
         granted: "마이크 접근이 허용되었습니다.",
@@ -2449,6 +2450,10 @@ export const ko: TranslationResources = {
     general: {
       title: "일반",
       sending: "전송",
+      microphone: {
+        label: "마이크",
+        description: "받아쓰기 및 음성 모드에서 마이크 사용 허용",
+      },
       setup: {
         label: "초기 설정",
         description: "모양, 제공자, 프로젝트, 휴대폰 페어링을 다시 진행합니다",
