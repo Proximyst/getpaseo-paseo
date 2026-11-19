@@ -43,8 +43,6 @@ export interface AddHostMethodModalProps {
   onClose: () => void;
   onDirectConnection: () => void;
   onRemoteSsh: () => void;
-  onScanQr: () => void;
-  onPasteLink: () => void;
 }
 
 export function AddHostMethodModal({

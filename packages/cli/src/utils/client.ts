@@ -1,4 +1,4 @@
-import { createHostClient, parseHostTarget } from "@getpaseo/client/node";
+import { createHostClient, parseSupportedHostTarget } from "@getpaseo/client/node";
 import {
   waitForDaemonReady,
   resolvePaseoHome,
@@ -162,7 +162,7 @@ export function resolveDaemonTarget(host: string): TransportTarget {
 }
 
 export function resolveDaemonPassword(host: string): string | undefined {
-  const fromUri = parseHostTarget(host).password;
+  const fromUri = parseSupportedHostTarget(host).password;
   if (fromUri) return fromUri;
   const fromEnv = process.env.PASEO_PASSWORD;
   return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;

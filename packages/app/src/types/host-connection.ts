@@ -71,6 +71,15 @@ export type HostConnection =
   | RemoteSshHostConnection
   | RelayHostConnection;
 
+export function assertSupportedHostConnection(connection: HostConnection): void {
+  if (connection.type === "relay") {
+    throw new Error("Relay connections are not supported. Use a direct or SSH connection.");
+  }
+  if (connection.type === "directPipe") {
+    throw new Error("Windows named pipes are not supported. Use a Unix socket.");
+  }
+}
+
 export type HostLifecycle = Record<string, never>;
 
 export interface HostProfile {

@@ -77,7 +77,7 @@ paseo --host localhost:6767 host enable hst_123
 paseo --host localhost:6767 host rm hst_123
 ```
 
-`add` 接受 TCP/主机和端口、`ws://`/`wss://`、本地 socket/管道、SSH，以及 relay/配对 URL。
+`add` 接受 TCP（`host:port` 或 `tcp://`）、`ws://`/`wss://`、本地 Unix 套接字或 SSH，不接受中继和 Windows 命名管道。
 SSH 连接到已经运行的 daemon。如果该 daemon 需要密码，在 SSH URI 中添加 `?password=...`（已有 `daemonPort` 时使用 `&password=...`）。无法访问的目标仍会保存，并自动重试。
 `ls` 包括已禁用和连接失败的主机。`inspect` 包括不含凭据的连接详情和恢复说明。
 JSON 输出不会包含连接凭据。
@@ -96,7 +96,7 @@ paseo provider diagnostic codex --json
 paseo --host devbox:6767 provider diagnostic opencode
 ```
 
-诊断信息包括配置的命令、daemon 的 `PATH` 和 shell、匹配到的二进制文件、解析出的路径、版本、模型数量和 Provider 状态。对于远程 daemon，请使用全局的 `--host` 选项。这与 **设置 → 你的主机 → Providers → 对应 Provider → 诊断** 下显示的诊断相同。
+诊断信息包括配置的命令、daemon 的 `PATH` 和 shell、匹配到的二进制文件、解析出的路径、版本、模型数量和 Provider 状态。对于远程 daemon，请使用全局的 `--host` 选项。这与 **设置 → 你的主机 → Providers → 对应 Provider → 诊断报告** 下显示的诊断相同。
 
 ## 运行 Agent {#running-agents}
 
@@ -362,7 +362,6 @@ paseo agent detach <id>        # Make a subagent top-level
 
 ```bash
 paseo daemon config set daemon.listen 127.0.0.1:6799 --home ~/paseo-test
-paseo daemon config set daemon.relay.enabled false --home ~/paseo-test
 paseo daemon start --home ~/paseo-test
 paseo project ls --home ~/paseo-test
 paseo daemon restart --home ~/paseo-test
@@ -373,7 +372,7 @@ paseo daemon stop --home ~/paseo-test
 
 `restart` 请求现有的进程管理器替换 worker。它会重新读取文件，并保留进程管理器原始的环境变量和参数。成功表示已有另一个 worker 就绪，对于主目录目标还会跟随已变更的地址。它从不启动已停止的 daemon，也不会刷新进程管理器的二进制文件。超时时会报告请求是否已被确认；它无法证明重连失败的原因。
 
-`stop --home` 会等待该本地进程管理器退出。在 POSIX 上，它向进程管理器发送信号，不联系任何 TCP 端点。在 Windows 上，它使用已就绪 daemon 的关闭 RPC；未绑定的实例需要显式的 `--force`。`--force` 允许在正常关闭超时（默认 15 秒）后强制清理进程树。`stop --host` 只报告 **shutdown requested**；不会验证远程进程是否退出。在捕获的进程管理器退出后，服务管理器可能会启动另一个实例。
+`stop --home` 向本地进程管理器发送信号并等待退出，不联系 TCP 端点。`--force` 允许在正常关闭超时（默认 15 秒）后强制清理进程树。`stop --host` 只报告 **shutdown requested**，不会验证远程进程是否退出。进程管理器退出后，服务管理器可能会启动另一个实例。
 
 `status` 分别显示本地进程管理器的状态、它发布的端点、配置的地址和 RPC 可达性。已停止的主目录从不会在其配置的地址上被探测。未绑定但仍在运行的进程管理器显示为 **not ready**。如果经过身份验证的本地连接仍然打开，但状态详情超时，结果仍为 `reachable`，并附带一条说明详情不可用的备注。worker 和 Provider 字段会被省略。显式的 `--host` 查询在其状态请求失败时仍然会失败。
 
@@ -386,7 +385,7 @@ paseo daemon stop --home ~/paseo-test
 在前台部署命令中使用环境变量覆盖：
 
 ```bash
-PASEO_LISTEN=127.0.0.1:6799 PASEO_RELAY_ENABLED=false paseo daemon run --home ~/paseo-test
+PASEO_LISTEN=127.0.0.1:6799 paseo daemon run --home ~/paseo-test
 ```
 
 它会一直保持附着，直到进程管理器退出或你取消，没有就绪超时。worker 重启会保留这些启动输入。要修改它们，请停止并重新启动部署。如果主目录中已经有一个运行中的进程管理器，`run` 会返回 `already_running`，而不会接管或启动前台进程。
@@ -406,7 +405,7 @@ PASEO_LISTEN=127.0.0.1:6799 PASEO_RELAY_ENABLED=false paseo daemon run --home ~/
 | 两个环境变量选择器都存在，且没有参数     | `TARGET_AMBIGUOUS`                   |
 | 都没有                                   | 默认的本地主目录 `~/.paseo`          |
 
-仅限本地的 `start`、`daemon run`、`config`、`onboard` 和 `set-password` 会拒绝显式的 `--host`，并忽略 `PASEO_HOST`。端点操作保留 TCP、Unix 套接字、Windows 管道、SSH 和配对信息等传输方式。在宿主机上控制容器的 CLI 需要 `--host` 或 `PASEO_HOST`。
+仅限本地的 `start`、`daemon run`、`config`、`onboard` 和 `set-password` 会拒绝显式的 `--host`，并忽略 `PASEO_HOST`。端点传输支持 TCP、Unix 套接字和 SSH，不支持 Windows 命名管道和中继配对地址。
 
 ## Hub {#hub}
 
@@ -446,24 +445,17 @@ paseo hub logout               # Remove the active stored CLI login
 
 ## 连接远程 daemon {#connecting-to-a-remote-daemon}
 
-全局的 `--host` 选项接受本地目标（`host:port`、Unix 套接字或 Windows 管道），也接受配对信息 URL，即移动应用在扫码配对时使用的同一个 `https://app.paseo.sh/#offer=...` 链接。使用配对信息 URL 时，CLI 会通过 Paseo 中继以端到端加密的方式连接，因此你可以驱动另一台机器上的 daemon，而不必把它暴露在网络上。
-
-从你要控制的 daemon 获取配对信息 URL：
+全局 `--host` 选项接受直接连接地址（`host:port` 或 Unix 套接字）或 SSH URI：
 
 ```bash
-paseo daemon pair          # prints the QR and link when relay is enabled
-paseo daemon pair --relay  # enables relay without prompting
-paseo daemon pair --json   # structured output; never prompts
+paseo --host workstation.local:6767 ls
+paseo --host ssh://user@host ls
+paseo --host 'ssh://user@host:2222?daemonPort=7777' run --cwd /workspace "fix the failing tests"
 ```
 
-新安装默认关闭中继。中继被禁用时会返回 `RELAY_DISABLED` 错误；传入 `--relay` 表示明确同意。对于已停止的主目录，配对会被标记为离线；`--relay` 会保存中继启用设置，配对信息中会包含一条启动说明。运行中但不可达的主目录从不会退回到离线身份。中继配对是端到端加密的。见[安全](/docs/security)。
+请先启动远程 Linux daemon。SSH 不会安装或启动 daemon，并使用本地 OpenSSH 客户端通过密钥或 agent 进行非交互式认证。参见 [SSH 连接](/docs/connectivity#ssh)。
 
-在任何地方使用它：
-
-```bash
-paseo --host 'https://app.paseo.sh/#offer=eyJ2IjoyLC...' ls
-paseo --host "$OFFER_URL" run "fix the failing tests"
-```
+如需从本机以外直接访问，请使用受信任的局域网、VPN 或 TLS 代理，并设置 daemon 密码。`paseo daemon pair` 只显示直接连接说明，不会生成中继配对链接。
 
 你也可以通过 `PASEO_HOST` 设置一次，而不必在每条命令中传入 `--host`。显式的参数会覆盖环境变量。
 

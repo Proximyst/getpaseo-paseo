@@ -122,6 +122,19 @@ describe("Remote SSH desktop transport", () => {
 });
 
 describe("local transport session lifecycle", () => {
+  it("refuses a Windows named pipe before creating a desktop bridge session", () => {
+    const resolveEndpoint = vi.fn(async () => createEndpoint());
+    const { manager, scheduledTimeouts } = createManagerHarness(resolveEndpoint, []);
+    expect(() =>
+      manager.open({
+        sessionId: "pipe-session",
+        target: { transportType: "pipe", transportPath: String.raw`\\.\pipe\paseo` },
+      }),
+    ).toThrow("Windows named pipes are not supported");
+    expect(resolveEndpoint).not.toHaveBeenCalled();
+    expect(scheduledTimeouts).toEqual([]);
+  });
+
   it("releases an opening transport when its setup deadline expires", async () => {
     const firstEndpoint = createEndpoint();
     const secondEndpoint = createEndpoint();

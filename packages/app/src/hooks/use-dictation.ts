@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AudioCaptureStartError, type AudioCaptureStartFailure } from "@/audio";
 import {
   isMicrophoneEnabled,
   requireMicrophoneEnabled,
@@ -9,7 +10,7 @@ import {
 import { DictationStreamSender } from "@/dictation/dictation-stream-sender";
 import { useDictationAudioSource } from "@/hooks/use-dictation-audio-source";
 import { generateMessageId } from "@/types/stream";
-import { AttemptGuard } from "@/utils/attempt-guard";
+import { AttemptCancelledError, AttemptGuard } from "@/utils/attempt-guard";
 import {
   DURATION_TICK_MS,
   PCM_DICTATION_FORMAT,
@@ -37,6 +38,8 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
   const [partialTranscript, setPartialTranscript] = useState("");
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<AudioCaptureStartFailure | null>(null);
+  const clearStartError = useCallback(() => setStartError(null), []);
   const [status, setStatus] = useState<DictationStatus>("idle");
   const latestPartialTranscriptRef = useRef("");
 
@@ -159,7 +162,7 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
       if (next.status !== "connected") {
         return;
       }
-      if (!isRecordingRef.current) {
+      if (!isRecordingRef.current || actionGateRef.current.cancelling || !isMicrophoneEnabled()) {
         return;
       }
       void startNewStream("reconnect").catch((err) => {
@@ -173,7 +176,7 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
       return;
     }
     return client.on("dictation_stream_partial", (message) => {
-      if (message.type !== "dictation_stream_partial") {
+      if (message.type !== "dictation_stream_partial" || !isMicrophoneEnabled()) {
         return;
       }
       const activeDictationId = senderRef.current?.getDictationId();
@@ -231,9 +234,16 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
     [reportError, stopDurationTracking],
   );
 
-  const audio = useDictationAudioSource({
+  const {
+    start: startAudio,
+    stop: stopAudio,
+    volume,
+    isPaused,
+  } = useDictationAudioSource({
     onPcmSegment: (audioData) => {
-      senderRef.current?.enqueueSegment(audioData);
+      if (isMicrophoneEnabled() && !actionGateRef.current.cancelling) {
+        senderRef.current?.enqueueSegment(audioData);
+      }
     },
     onError: (err) => {
       onErrorRef.current?.(err);
@@ -247,10 +257,6 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
       handleDictationFailure(new Error("Dictation was interrupted by another audio source."));
     },
   });
-  const audioStopRef = useRef(audio.stop);
-  useEffect(() => {
-    audioStopRef.current = audio.stop;
-  }, [audio.stop]);
 
   const startDictation = useCallback(async () => {
     if (
@@ -271,17 +277,20 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
     actionGateRef.current.starting = true;
     const attemptId = attemptGuardRef.current.next();
     setError(null);
+    setStartError(null);
     setPartialTranscript("");
     setDuration(0);
     setIsProcessing(false);
     setStatus("recording");
     clearStreamingState();
 
+    let captureStarted = false;
     try {
       await requireMicrophoneEnabled();
       attemptGuardRef.current.assertCurrent(attemptId);
-      await audio.start();
+      await startAudio();
       attemptGuardRef.current.assertCurrent(attemptId);
+      captureStarted = true;
       isRecordingRef.current = true;
       setIsRecording(true);
       if (enableDuration) {
@@ -292,33 +301,46 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
         attemptGuardRef.current.assertCurrent(attemptId);
       }
     } catch (err) {
+      if (!attemptGuardRef.current.isCurrent(attemptId)) {
+        return;
+      }
       try {
         senderRef.current?.cancel();
       } catch {
-        // The stream may already have been cancelled by a policy change.
+        // Still clear the local stream if it could not be cancelled remotely.
       }
       clearStreamingState();
-      await audio.stop().catch(() => undefined);
       stopDurationTracking();
       isRecordingRef.current = false;
       setIsRecording(false);
       setStatus("idle");
-      if (!attemptGuardRef.current.isCurrent(attemptId)) {
+      await stopAudio(false).catch(() => undefined);
+      if (
+        !attemptGuardRef.current.isCurrent(attemptId) ||
+        !isMicrophoneEnabled() ||
+        err instanceof AttemptCancelledError
+      ) {
         return;
       }
-      reportError(err, "Failed to start dictation");
+      if (captureStarted) {
+        reportError(err, "Failed to start dictation stream");
+      } else {
+        console.error("[useDictation] Failed to start dictation capture", err);
+        setStartError(err instanceof AudioCaptureStartError ? err.reason : "startFailed");
+      }
     } finally {
       actionGateRef.current.starting = false;
     }
   }, [
-    audio,
     canStart,
     clearStreamingState,
     client,
     enableDuration,
     reportError,
+    startAudio,
     startDurationTracking,
     startNewStream,
+    stopAudio,
     stopDurationTracking,
   ]);
 
@@ -346,7 +368,8 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
       } catch {
         // no-op
       }
-      await audio.stop();
+      clearStreamingState();
+      await stopAudio(false);
     } catch (err) {
       reportError(err, "Failed to cancel dictation");
     } finally {
@@ -355,14 +378,14 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
       setIsProcessing(false);
       isProcessingRef.current = false;
       setStatus("idle");
-      clearStreamingState();
       actionGateRef.current.cancelling = false;
     }
-  }, [audio, clearStreamingState, reportError, stopDurationTracking]);
+  }, [clearStreamingState, reportError, stopAudio, stopDurationTracking]);
 
   useEffect(
     () =>
       subscribeMicrophoneDisabled(() => {
+        setStartError(null);
         void cancelDictation();
       }),
     [cancelDictation],
@@ -392,7 +415,7 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
     const attemptId = attemptGuardRef.current.next();
 
     try {
-      await audio.stop();
+      await stopAudio();
       attemptGuardRef.current.assertCurrent(attemptId);
 
       setStatus("uploading");
@@ -409,7 +432,7 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
       attemptGuardRef.current.assertCurrent(attemptId);
       handleStreamingTranscriptionSuccess(transcriptText, generateMessageId());
     } catch (err) {
-      if (err instanceof Error && err.name === "AttemptCancelledError") {
+      if (!attemptGuardRef.current.isCurrent(attemptId)) {
         return;
       }
       handleDictationFailure(err);
@@ -417,10 +440,10 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
       actionGateRef.current.confirming = false;
     }
   }, [
-    audio,
     canConfirm,
     handleDictationFailure,
     handleStreamingTranscriptionSuccess,
+    stopAudio,
     stopDurationTracking,
     ensureFinalTranscript,
   ]);
@@ -448,7 +471,7 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
       attemptGuardRef.current.assertCurrent(attemptId);
       handleStreamingTranscriptionSuccess(text, generateMessageId());
     } catch (err) {
-      if (err instanceof Error && err.name === "AttemptCancelledError") {
+      if (!attemptGuardRef.current.isCurrent(attemptId)) {
         return;
       }
       handleDictationFailure(err);
@@ -478,30 +501,32 @@ export function useDictation(options: UseDictationOptions): UseDictationResult {
     stopDurationTracking();
     setDuration(0);
     setError(null);
+    setStartError(null);
     setStatus("idle");
     clearStreamingState();
   }, [clearStreamingState, stopDurationTracking]);
 
   useEffect(() => {
     const attemptGuard = attemptGuardRef.current;
-    const audioStop = audioStopRef;
     return () => {
       attemptGuard.cancel();
       stopDurationTracking();
-      void audioStop.current().catch(() => undefined);
+      void stopAudio(false).catch(() => undefined);
       senderRef.current?.dispose();
     };
-  }, [stopDurationTracking]);
+  }, [stopAudio, stopDurationTracking]);
 
   return {
     isRecording,
     isRecordingActive,
     isProcessing,
     partialTranscript,
-    volume: audio.volume,
+    volume,
     duration,
     error,
-    status: status === "recording" && audio.isPaused ? "paused" : status,
+    startError,
+    clearStartError,
+    status: status === "recording" && isPaused ? "paused" : status,
     startDictation,
     cancelDictation,
     confirmDictation,

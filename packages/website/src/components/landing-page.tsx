@@ -1286,7 +1286,7 @@ const FAQ_ENTRIES = [
 
 const FAQ_LINKS = {
   agents: "/agents",
-  muse: "/docs/muse-code",
+  muse: "/docs/supported-providers/muse-code",
   voice: "/docs/voice",
   configuration: "/docs/configuration",
   worktrees: "/docs/worktrees",

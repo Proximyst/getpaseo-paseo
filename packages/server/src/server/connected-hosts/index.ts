@@ -8,7 +8,7 @@ import {
   createHostClient,
   createHostChannelTransport,
   createHostTransportFactory,
-  parseHostTarget,
+  parseSupportedHostTarget,
   HostTransportBudget,
 } from "@getpaseo/client/node";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
@@ -36,6 +36,16 @@ export class HostError extends Error {
 }
 const SavedSchema = HostSummarySchema.extend({ connection: z.string() });
 type Saved = z.infer<typeof SavedSchema>;
+
+function applyHostConnectionUpdate(row: Saved, patch: HostUpdate): void {
+  if (patch.connection !== undefined) {
+    row.targetDescription = parseSupportedHostTarget(patch.connection).description;
+    row.connection = patch.connection;
+  } else if (patch.enabled === true) {
+    parseSupportedHostTarget(row.connection);
+  }
+}
+
 export interface HostActor {
   sourceId: string;
   manageSources: boolean;
@@ -123,7 +133,7 @@ export class ConnectedHosts {
   add(input: HostAdd, actor: HostActor): Promise<HostSummary> {
     return this.mutate(async () => {
       input = HostAddSchema.parse(input);
-      const target = parseHostTarget(input.connection);
+      const target = parseSupportedHostTarget(input.connection);
       const source = { id: actor.sourceId, key: input.sourceKey ?? randomUUID() };
       const existing = this.rows.find(
         (row) => row.source.id === source.id && row.source.key === source.key,
@@ -188,10 +198,7 @@ export class ConnectedHosts {
         ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
         ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
       };
-      if (patch.connection !== undefined) {
-        row.connection = patch.connection;
-        row.targetDescription = parseHostTarget(patch.connection).description;
-      }
+      applyHostConnectionUpdate(row, patch);
       if (patch.replaceIdentity) row.serverId = null;
       const restart =
         patch.connection !== undefined || patch.enabled !== undefined || patch.replaceIdentity;
@@ -242,11 +249,21 @@ export class ConnectedHosts {
     resume?: { failures: number; transports: DaemonTransportFactory },
   ): void {
     if (!row.enabled || this.closed) return;
-    const transports =
-      resume?.transports ??
-      createHostTransportFactory(row.connection, this.budget, {
-        webSocketAgent: webSocketProxyAgent,
-      });
+    let transports: DaemonTransportFactory;
+    try {
+      transports =
+        resume?.transports ??
+        createHostTransportFactory(row.connection, this.budget, {
+          webSocketAgent: webSocketProxyAgent,
+        });
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "invalid_connection")) {
+        throw error;
+      }
+      row.status = "error";
+      row.error = { code: error.code, message: error.message };
+      return;
+    }
     let stopped = false;
     let attempts = resume?.failures ?? 0;
     let retry: ReturnType<typeof setTimeout> | undefined;

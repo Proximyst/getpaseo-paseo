@@ -238,9 +238,12 @@ export function createAudioEngine(
         return;
       }
       const attemptId = captureAttempt.next();
-      await requireMicrophoneEnabled();
+      await requireMicrophoneEnabled().catch((error) => {
+        captureAttempt.assertCurrent(attemptId);
+        throw error;
+      });
       captureAttempt.assertCurrent(attemptId);
-      if (destroyed) {
+      if (destroyed || !isMicrophoneEnabled()) {
         throw new AttemptCancelledError();
       }
 
@@ -268,6 +271,7 @@ export function createAudioEngine(
       try {
         const context = await ensureCaptureContext();
         captureAttempt.assertCurrent(attemptId);
+        if (!isMicrophoneEnabled()) throw new AttemptCancelledError();
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
@@ -282,8 +286,11 @@ export function createAudioEngine(
         }
         refs.stream = stream;
         const source = context.createMediaStreamSource(stream);
+        refs.source = source;
         const processor = context.createScriptProcessor(4096, 1, 1);
+        refs.processor = processor;
         const gain = context.createGain();
+        refs.gain = gain;
         gain.gain.value = 0;
 
         processor.onaudioprocess = (event) => {
@@ -314,17 +321,10 @@ export function createAudioEngine(
         gain.connect(context.destination);
 
         refs.started = true;
-        refs.stream = stream;
-        refs.source = source;
-        refs.processor = processor;
-        refs.gain = gain;
       } catch (error) {
-        if (captureAttempt.isCurrent(attemptId)) {
-          await stopCapture();
-        }
-        const wrapped = error instanceof Error ? error : new Error(String(error));
-        callbacks.onError?.(wrapped);
-        throw wrapped;
+        captureAttempt.assertCurrent(attemptId);
+        await stopCapture();
+        throw error;
       }
     },
 

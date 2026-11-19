@@ -72,6 +72,10 @@ physical reconnect and keepalive; the registry retains configuration, identity a
 status. Unreachable registrations remain saved. Identity is pinned when discovered. Self and duplicate
 registrations remain inspectable; a changed destination requires explicit identity replacement.
 
+The fork accepts direct WebSocket, Unix-socket, and SSH registrations. It refuses relay and
+Windows named-pipe addresses before saving. Registrations carried over from another build
+remain inspectable and removable, but cannot connect until their address is replaced.
+
 Both daemons advertise `connectedHosts`; the shared link additionally requires `hostMultiplexing`.
 A completes capability and pinned-identity checks on each physical recovery before admitting channels. There is no local fallback. An older daemon continues to serve existing local
 operations; requesting this feature gives update guidance. The registry retries an older destination
@@ -93,8 +97,7 @@ RPC codes pass through unchanged, and connection/recovery behavior matches direc
 Text session envelopes carry a channel identifier. Binary routing adds an opcode, a bounded UTF-8
 channel identifier, and the original terminal or file-transfer bytes. It never converts those bytes to
 base64 JSON. The existing direct binary opcodes and 100 MiB message limit remain unchanged; routed
-payloads reserve space for the routing header inside that limit. Relay encryption retains its own
-existing frame limit.
+payloads reserve space for the routing header inside that limit.
 
 Host links cap saved registrations, simultaneous channels, handshake lifetime, frames, physical
 output, and aggregate queued bytes. Capacity checks use the actual escaped outer JSON or binary

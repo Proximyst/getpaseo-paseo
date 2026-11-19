@@ -6,7 +6,7 @@ export interface DictationAudioSourceConfig {
 
 export interface DictationAudioSource {
   start: () => Promise<void>;
-  stop: () => Promise<void>;
+  stop: (emitPending?: boolean) => Promise<void>;
   volume: number;
   isPaused: boolean;
 }

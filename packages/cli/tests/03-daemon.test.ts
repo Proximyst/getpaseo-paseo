@@ -7,12 +7,12 @@
  *
  * Tests:
  * - daemon --help shows subcommands
- * - daemon pair does not create a relay offer without explicit consent
+ * - daemon pair offers direct connection guidance and never creates a relay offer
  * - daemon status reports stopped when daemon not running
  * - daemon status --json outputs valid JSON
  * - daemon stop handles daemon not running gracefully
  * - daemon restart refuses to start a stopped daemon
- * - daemon status probes the live relay state over local IPC
+ * - Unix-socket status and config reload work with relay disabled
  */
 
 import assert from "node:assert";
@@ -121,17 +121,14 @@ try {
     console.log("✓ daemon --help shows subcommands\n");
   }
 
-  // Test 2: non-interactive pairing keeps relay disabled by default
+  // Test 2: pairing offers direct connection guidance, never a relay offer
   {
-    console.log("Test 2: daemon pair requires explicit relay consent");
+    console.log("Test 2: daemon pair shows direct connection guidance");
     const result = await daemonCommand(["pair"]);
-    assert.strictEqual(result.exitCode, 1, "daemon pair should require relay consent");
-    assert(
-      result.stderr.includes("Relay pairing is disabled"),
-      "output should explain that relay pairing is disabled",
-    );
+    assert.strictEqual(result.exitCode, 0, result.stderr);
+    assert.match(result.stdout, /TCP address.*SSH/);
     assert(!result.stdout.includes("#offer="), "output should not include a pairing offer");
-    console.log("✓ daemon pair requires explicit relay consent\n");
+    console.log("✓ daemon pair shows direct connection guidance\n");
   }
 
   // Test 3: daemon status reports stopped when daemon not running
@@ -149,12 +146,8 @@ try {
   {
     console.log("Test 4: daemon pair --json reports relay disabled");
     const result = await daemonCommand(["pair", "--json"]);
-    assert.strictEqual(result.exitCode, 1, "daemon pair --json should require relay consent");
-    const errorLine = result.stderr.split("\n").find((line) => line.startsWith("{"));
-    assert(errorLine, "stderr should include a structured error");
-    const error = JSON.parse(errorLine);
-    assert.strictEqual(error.code, "RELAY_DISABLED", "error should identify relay state");
-    assert(!result.stdout.includes("#offer="), "output should not include a pairing offer");
+    assert.strictEqual(result.exitCode, 0, result.stderr);
+    assert.deepStrictEqual(JSON.parse(result.stdout), { relayEnabled: false, url: null, qr: null });
     console.log("✓ daemon pair --json reports relay disabled\n");
   }
 
@@ -205,33 +198,31 @@ try {
     assert.strictEqual(configured.exitCode, 0, configured.stderr);
   }
 
-  // Test 8: status uses the running daemon as relay authority over local IPC
+  // Test 8: the Unix socket stays reachable with explicit relay enablement attempts
   {
-    console.log("Test 8: daemon status probes live relay state over local IPC");
-    const listen =
-      process.platform === "win32"
-        ? `\\\\.\\pipe\\paseo-status-${process.pid}-${Date.now()}`
-        : join(paseoHome, "status.sock");
+    console.log("Test 8: daemon status over a Unix socket keeps relay disabled");
+    const listen = join(paseoHome, "status.sock");
     const configPath = join(paseoHome, "config.json");
     const config = JSON.parse(await readFile(configPath, "utf-8"));
     config.daemon = {
       ...config.daemon,
       listen,
-      relay: { ...config.daemon?.relay, enabled: false },
+      relay: { ...config.daemon?.relay, enabled: true },
     };
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
     // A supervised daemon owns and heartbeats paseo.pid. Launch the worker
     // directly so this fixture naturally has a reachable daemon without a PID file.
     const workerEntry = resolveDaemonWorkerEntry();
     const workerArgs = workerEntry.endsWith(".ts")
-      ? ["--import", "tsx", workerEntry, "--relay"]
-      : [workerEntry, "--relay"];
+      ? ["--import", "tsx", workerEntry]
+      : [workerEntry];
     const worker = spawn(process.execPath, workerArgs, {
       cwd: join(import.meta.dirname, ".."),
       env: {
         ...process.env,
         PASEO_HOME: paseoHome,
         PASEO_LISTEN: listen,
+        PASEO_RELAY_ENABLED: "true",
         PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0",
         PASEO_DICTATION_ENABLED: "0",
         PASEO_VOICE_MODE_ENABLED: "0",
@@ -252,11 +243,11 @@ try {
         },
         (result) =>
           result.statusPayload?.connectedDaemon === "reachable" &&
-          result.statusPayload.relay !== "disabled" &&
+          result.statusPayload.relay?.enabled === false &&
           result.pairingResult.exitCode === 0,
         async (result) =>
           [
-            "IPC daemon did not expose live relay state",
+            "Unix socket daemon was not reachable with relay disabled",
             `status: ${result.statusResult.stdout || result.statusResult.stderr}`,
             `pairing: ${result.pairingResult.stdout || result.pairingResult.stderr}`,
             `daemon log:\n${await tailDaemonLog()}`,
@@ -271,20 +262,26 @@ try {
         undefined,
         "endpoint status must not invent local PID state",
       );
-      assert.notStrictEqual(payload.relay, "disabled", "status should use live relay state");
+      assert.strictEqual(
+        payload.relay?.enabled,
+        false,
+        "status should not report relay as enabled",
+      );
       assert.strictEqual(
         pairing.exitCode,
         0,
         `IPC daemon pairing should succeed: ${pairing.stderr}`,
       );
-      const pairingPayload = JSON.parse(pairing.stdout);
-      assert.strictEqual(pairingPayload.relayEnabled, true, "pairing should use live relay state");
-      assert.match(pairingPayload.url, /#offer=/, "pairing should use the live daemon offer");
+      assert.deepStrictEqual(JSON.parse(pairing.stdout), {
+        relayEnabled: false,
+        url: null,
+        qr: null,
+      });
 
       const reloadConfig = JSON.parse(await readFile(configPath, "utf-8"));
       reloadConfig.daemon = {
         ...reloadConfig.daemon,
-        listen: process.platform === "win32" ? `${listen}-changed` : `${listen}.changed`,
+        listen: `${listen}.changed`,
         browserTools: { enabled: true },
       };
       await writeFile(configPath, `${JSON.stringify(reloadConfig, null, 2)}\n`, "utf-8");
@@ -333,21 +330,24 @@ try {
           ["daemon", "pair", "--home", foreignHome, "--json"],
           { PASEO_HOME: foreignHome },
         );
-        assert.strictEqual(foreignPairing.exitCode, 1);
-        assert.match(foreignPairing.stderr, /RELAY_DISABLED/);
-        assert(!foreignPairing.stdout.includes("#offer="));
+        assert.strictEqual(foreignPairing.exitCode, 0, foreignPairing.stderr);
+        assert.deepStrictEqual(JSON.parse(foreignPairing.stdout), {
+          relayEnabled: false,
+          url: null,
+          qr: null,
+        });
       } finally {
         await rm(foreignHome, { recursive: true, force: true });
       }
     } finally {
       await stopChildProcess(worker);
     }
-    console.log("✓ daemon status probes live relay state over local IPC\n");
+    console.log("✓ daemon status over a Unix socket keeps relay disabled\n");
   }
 
-  // Test 9: explicit offline relay consent persists for subsequent pairing
+  // Test 9: explicit pairing flags cannot enable or persist relay
   {
-    console.log("Test 9: daemon pair --relay persists offline relay consent");
+    console.log("Test 9: daemon pair --relay refuses relay enablement");
     const configPath = join(paseoHome, "config.json");
     const config = JSON.parse(await readFile(configPath, "utf-8"));
     config.daemon = {
@@ -358,21 +358,20 @@ try {
 
     const pairing = await daemonCommand(["pair", "--relay", "--json"]);
 
-    assert.strictEqual(
-      pairing.exitCode,
-      0,
-      `persisted relay pairing should succeed while stopped: ${pairing.stderr}`,
-    );
-    const payload = JSON.parse(pairing.stdout);
-    assert.strictEqual(payload.relayEnabled, true, "pairing should preserve persisted relay state");
-    assert.match(payload.url, /#offer=/, "pairing should include the offline offer");
+    assert.notStrictEqual(pairing.exitCode, 0);
+    assert.match(pairing.stderr, /--relay/);
+    assert(!pairing.stdout.includes("#offer="));
     const persistedRelay = await daemonCommand(["config", "get", "daemon.relay.enabled", "--json"]);
     assert.strictEqual(persistedRelay.exitCode, 0, persistedRelay.stderr);
-    assert.strictEqual(JSON.parse(persistedRelay.stdout).value, true);
+    assert.strictEqual(JSON.parse(persistedRelay.stdout).value, false);
     const subsequentPairing = await daemonCommand(["pair", "--json"]);
     assert.strictEqual(subsequentPairing.exitCode, 0, subsequentPairing.stderr);
-    assert.match(JSON.parse(subsequentPairing.stdout).url, /#offer=/);
-    console.log("✓ daemon pair --relay persists offline consent for subsequent pairing\n");
+    assert.deepStrictEqual(JSON.parse(subsequentPairing.stdout), {
+      relayEnabled: false,
+      url: null,
+      qr: null,
+    });
+    console.log("✓ daemon pair --relay refuses relay enablement\n");
   }
 } finally {
   // Best-effort daemon cleanup in case assertions fail before explicit stop.

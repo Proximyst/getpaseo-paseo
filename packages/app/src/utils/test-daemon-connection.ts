@@ -5,7 +5,7 @@ import {
   type DaemonAuthFailureReason,
 } from "@getpaseo/client/internal/daemon-client";
 import type { DaemonClientConfig } from "@getpaseo/client/internal/daemon-client";
-import type { HostConnection } from "@/types/host-connection";
+import { assertSupportedHostConnection, type HostConnection } from "@/types/host-connection";
 import { createAppWebSocketFactory } from "@/runtime/websocket-factory";
 import { createHostLogger } from "@/runtime/host-logger";
 import { getOrCreateClientId } from "./client-id";
@@ -319,6 +319,7 @@ export async function connectToDaemon(
   options?: ProbeOptions,
   deps: DaemonConnectionDependencies<DaemonProbeClient> = defaultDaemonConnectionDependencies,
 ): Promise<{ client: DaemonProbeClient; serverId: string; hostname: string | null }> {
+  assertSupportedHostConnection(connection);
   const config = await buildClientConfig(connection, options?.serverId, options, deps);
   let serverId = options?.serverId;
   config.logger = deps.createLogger(() => serverId);

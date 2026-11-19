@@ -80,7 +80,7 @@ paseo --host localhost:6767 host enable hst_123
 paseo --host localhost:6767 host rm hst_123
 ```
 
-Add accepts TCP/host-and-port, `ws://`/`wss://`, local socket/pipe, SSH, and relay/pairing URLs.
+Add accepts TCP (`host:port` or `tcp://`), `ws://`/`wss://`, a local Unix socket, or SSH. Relay and Windows named pipes are not accepted.
 SSH connects to an already running daemon. Add `?password=...` to an SSH URI when that daemon requires a password (`&password=...` after `daemonPort`). Unreachable targets remain saved and retry automatically.
 `ls` includes disabled and failed hosts. `inspect` includes safe connection details and recovery guidance.
 JSON output never includes connection credentials.
@@ -99,7 +99,7 @@ paseo provider diagnostic codex --json
 paseo --host devbox:6767 provider diagnostic opencode
 ```
 
-The diagnostic includes the configured command, daemon `PATH` and shell, matching binaries, resolved path, version, model count, and provider status. Use the global `--host` option for a remote daemon. This is the same diagnostic shown under **Settings → your host → Providers → provider → Diagnostic**.
+The diagnostic includes the configured command, daemon `PATH` and shell, matching binaries, resolved path, version, model count, and provider status. Use the global `--host` option for a remote daemon. This is the same diagnostic shown under **Settings → your host → Providers → provider → Diagnostic report**.
 
 ## Running agents
 
@@ -397,7 +397,7 @@ paseo daemon stop --home ~/paseo-test
 
 `reload` validates the file, applies runtime-safe changes, and reports `appliedPaths`, `restartRequiredPaths`, and `overrideControlledPaths`. It never implicitly restarts. Use `--json` or `--format yaml` for structured results. An older host lacking the capability reports that it needs an update.
 
-The root aliases `start`, `status`, `restart`, and `reload` use the same commands as `daemon`. Root `run` and `stop` remain agent operations.
+The root aliases `start`, `status`, `restart`, `reload`, and `pair` use the same commands as `daemon`. Root `run` and `stop` remain agent operations.
 
 ### Foreground deployments and migration
 
@@ -474,7 +474,7 @@ paseo --host 'ssh://user@host:2222?daemonPort=7777' run --cwd /workspace "fix th
 
 Start the remote Linux daemon first; SSH transport neither installs nor starts it. It uses your local OpenSSH client and non-interactive key/agent authentication. See [Connectivity](/docs/connectivity#ssh).
 
-For direct access beyond localhost, use a trusted LAN/VPN or TLS proxy and set a daemon password. Relay pairing commands and pairing-offer URLs are unavailable.
+For direct access beyond localhost, use a trusted LAN/VPN or TLS proxy and set a daemon password. `paseo daemon pair` prints direct connection guidance and never produces a relay offer. Relay pairing-offer URLs are unavailable.
 
 You can also set it once via `PASEO_HOST` instead of passing `--host` on every command. An explicit flag overrides the environment variable.
 

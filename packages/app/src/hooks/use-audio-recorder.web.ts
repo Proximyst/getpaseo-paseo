@@ -54,6 +54,26 @@ function assertMicrophoneEnvironment(): void {
   }
 }
 
+async function requestMicrophone(options: AudioCaptureConfig | undefined): Promise<MediaStream> {
+  assertMicrophoneEnvironment();
+  const constraints: MediaStreamConstraints = {
+    audio: {
+      channelCount: options?.numberOfChannels ?? 1,
+      sampleRate: options?.sampleRate,
+      noiseSuppression: true,
+      echoCancellation: true,
+      autoGainControl: true,
+    },
+  };
+
+  try {
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to access microphone: ${message}`, { cause: error });
+  }
+}
+
 export function useAudioRecorder(config?: AudioCaptureConfig) {
   const [isRecording, setIsRecording] = useState(false);
 
@@ -193,28 +213,8 @@ export function useAudioRecorder(config?: AudioCaptureConfig) {
 
     await requireMicrophoneEnabled();
     attemptGuardRef.current.assertCurrent(attemptId);
-    assertMicrophoneEnvironment();
-
     const options = configRef.current;
-    const constraints: MediaStreamConstraints = {
-      audio: {
-        channelCount: options?.numberOfChannels ?? 1,
-        sampleRate: options?.sampleRate,
-        noiseSuppression: true,
-        echoCancellation: true,
-        autoGainControl: true,
-      },
-    };
-
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (error) {
-      throw new Error(
-        `Failed to access microphone: ${(error as { message?: string })?.message ?? String(error)}`,
-        { cause: error },
-      );
-    }
+    const stream = await requestMicrophone(options);
 
     try {
       attemptGuardRef.current.assertCurrent(attemptId);

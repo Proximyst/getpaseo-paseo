@@ -1,17 +1,17 @@
 ---
 title: 连接
-description: 通过 SSH、中继或 Tailscale 把 Paseo 客户端连接到你的 daemon。
+description: 通过直接连接、SSH 或 VPN 使用 Paseo 的 Linux 桌面端、网页版和 CLI。
 nav: 连接
 ---
 
 # 连接 {#connectivity}
 
-你的 Paseo 应用连接的是运行在你电脑或服务器上的 daemon。Paseo 桌面端和 CLI 可以通过 SSH 隧道连接。移动客户端可以通过 Paseo 中继连接，或者用 Tailscale 直接连接。
+你的 Paseo 客户端连接到 Linux 电脑或服务器上的 daemon。Linux 桌面端和 CLI 可以通过 SSH 隧道连接，浏览器使用直接 HTTP/WebSocket 连接。本 fork 不支持中继或原生移动应用。
 
 这里说的是客户端到 daemon 的传输。如果你要找的是由 GitHub、Slack 和 Discord 事件启动 Agent 的服务，那是 [Hub](/docs/hub)。
 
 - [SSH](#ssh)
-- [Paseo 中继](#paseo-relay)
+- [直接连接](#direct-connections)
 - [Tailscale](#tailscale)
 
 ## SSH {#ssh}
@@ -47,31 +47,27 @@ paseo --host 'ssh://user@host?daemonPort=7777' ls -a
 
 如果远程 daemon 设置了密码，请在 **守护进程密码** 中输入；它会随主机一起保存，并在每次连接时发送，与直连的密码一样。SSH 登录本身仍然基于密钥，Paseo 从不提示输入 SSH 密码。
 
-## Paseo 中继 {#paseo-relay}
+## 直接连接 {#direct-connections}
 
-中继无需 Tailscale、端口转发或网络配置即可工作。流量是端到端加密的。
+在 daemon 所在机器上，将 `daemon.listen` 绑定到受信任的局域网或 VPN 地址，并在允许本机之外的连接前设置 daemon 密码。参见[安全](/docs/security)和[密码认证](/docs/configuration#password-authentication)。
 
-在你启用之前，中继是关闭的。
-
-### 在 Paseo 桌面端启用中继 {#enable-relay-from-paseo-desktop}
-
-1. 打开 **设置 → 你的主机 → 配对设备**。
-2. 选择 **启用中继**。
-3. 用手机上的 Paseo 扫描二维码，或者复制配对链接并粘贴到手机应用中。
-
-### 在 CLI 中启用中继 {#enable-relay-from-the-cli}
-
-运行：
+在桌面端或网页版中，打开 **设置 → 添加主机 → 直接连接**，输入主机、端口和密码，然后连接。仅当地址由 TLS 反向代理提供服务时启用 **使用 SSL**。CLI 示例：
 
 ```bash
-paseo daemon pair
+paseo --host 192.168.1.10:6767 ls
 ```
 
-在提示时确认。Paseo 会打印二维码和配对链接。用手机上的 Paseo 扫描二维码，或在手机应用中选择 **粘贴配对链接**。
+浏览器无法启动本地 SSH 客户端。如需从浏览器访问只监听回环地址的远程 daemon，请先在终端转发端口：
+
+```bash
+ssh -N -L 6769:127.0.0.1:6767 user@host
+```
+
+然后在本地使用 `127.0.0.1:6769`。如果远程 daemon 提供 Web UI，可打开 `http://127.0.0.1:6769/`。
 
 ## Tailscale {#tailscale}
 
-在 daemon 所在的机器和你的手机上安装 [Tailscale](https://tailscale.com/download)，并在两台设备上登录同一个 tailnet。
+在 daemon 和客户端所在的机器上安装 [Tailscale](https://tailscale.com/download)，并登录同一个 tailnet。
 
 ### 1. 找到 daemon 机器的 Tailscale IP {#1-find-the-daemon-machines-tailscale-ip}
 
@@ -109,15 +105,14 @@ paseo daemon restart
 
 如果 daemon 由 Paseo 桌面端管理，请使用 **设置 → 你的主机 → 概览 → 重启 Daemon**。
 
-### 3. 连接手机应用 {#3-connect-the-phone-app}
+### 3. 连接客户端 {#3-connect-the-client}
 
-1. 在手机上连接 Tailscale。
+1. 在客户端机器上连接 Tailscale。
 2. 打开 Paseo，进入 **设置 → 添加主机 → 直接连接**。
-3. 在 **Host** 中输入 Tailscale IP。
-4. 在 **端口** 中输入 `6767`。
-5. 保持 **使用 SSL** 关闭，然后选择 **连接**。
+3. 输入 Tailscale IP、端口 `6767` 和 daemon 密码。
+4. 保持 **使用 SSL** 关闭，然后选择 **连接**。
 
-如果该主机已经通过中继配对过，Paseo 会把直连添加到同一个主机上。
+如需通过 CLI 连接，请运行 `paseo --host 100.101.102.103:6767 ls`。如需在浏览器中使用，也可以启用 daemon 的[内置 Web UI](/docs/web-ui)。
 
 ## 故障排查 {#troubleshooting}
 

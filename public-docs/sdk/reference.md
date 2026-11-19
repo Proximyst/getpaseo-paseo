@@ -33,7 +33,7 @@ Common optional configuration:
 | `reconnect.maxDelayMs`  | `number`      | Client default | Maximum reconnect delay.                         |
 | `logger`                | `PaseoLogger` | Unset          | Debug, info, warning, and error sink.            |
 
-Relay E2EE clients can also pass `e2ee.enabled` and `e2ee.daemonPublicKeyB64`. `appVersion`, `runtimeGeneration`, and runtime-metrics options exist for Paseo client surfaces; ordinary integrations can omit them.
+Relay transport is not supported in this fork. `appVersion`, `runtimeGeneration`, and runtime-metrics options exist for Paseo client surfaces; ordinary integrations can omit them.
 
 ## Client lifecycle
 

@@ -3,7 +3,7 @@ import { selectDaemonTarget } from "./daemon-target.js";
 
 const JSON_OPTION_DESCRIPTION = "Output in JSON format";
 const DAEMON_HOST_OPTION_DESCRIPTION =
-  "Explicit daemon endpoint: host:port, TCP, socket, SSH, or pairing URL (default: local home)";
+  "Explicit daemon endpoint: host:port, TCP, WebSocket, Unix socket, or SSH (default: local home)";
 
 const localCommands = new WeakSet<Command>();
 

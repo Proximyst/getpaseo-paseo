@@ -25,16 +25,31 @@ export interface HostTransportOptions {
   webSocketAgent?: (url: string) => Agent | undefined;
 }
 
+export function parseSupportedHostTarget(connection: string): HostTarget {
+  const target = parseHostTarget(connection);
+  if (target.kind === "socket") {
+    if (target.offer || isRelayClientWebSocketUrl(target.url)) {
+      throw Object.assign(
+        new Error("Relay connections are not supported. Use a direct or SSH connection."),
+        { code: "invalid_connection" },
+      );
+    }
+    if (target.socketPath && !target.url.startsWith("ws+unix:")) {
+      throw Object.assign(new Error("Windows named pipes are not supported. Use a Unix socket."), {
+        code: "invalid_connection",
+      });
+    }
+  }
+  return target;
+}
+
 /** A factory owns one attempt, including a fresh SSH process and its teardown. */
 export function createHostTransportFactory(
   connection: string,
   budget = new HostTransportBudget(),
   options: HostTransportOptions = {},
 ): DaemonTransportFactory {
-  const target = parseHostTarget(connection);
-  if (target.kind === "socket" && (target.offer || isRelayClientWebSocketUrl(target.url))) {
-    throw new Error("Relay connections are not supported. Use a direct or SSH connection.");
-  }
+  const target = parseSupportedHostTarget(connection);
   // Rises to "protected" once the daemon negotiates it, so a later attempt
   // cannot be downgraded to legacy endpoint security.
   let securityFloor: SecurityMode | undefined =
@@ -211,10 +226,7 @@ export function createHostClient(
   config: Omit<DaemonClientConfig, "url"> & HostTransportOptions,
   budget?: HostTransportBudget,
 ): DaemonClient {
-  const target = parseHostTarget(connection);
-  if (target.kind === "socket" && (target.offer || isRelayClientWebSocketUrl(target.url))) {
-    throw new Error("Relay connections are not supported. Use a direct or SSH connection.");
-  }
+  const target = parseSupportedHostTarget(connection);
   const { webSocketAgent, transportFactory, ...clientConfig } = config;
   return new DaemonClient({
     ...clientConfig,

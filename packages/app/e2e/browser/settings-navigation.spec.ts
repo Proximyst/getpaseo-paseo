@@ -34,7 +34,7 @@ import {
   changeSettingsInterfaceFontSizeKeepingSidebarPosition,
   expectSettingsHeader,
   openAddHostFlow,
-  selectHostConnectionType,
+  chooseDirectHostConnection,
   toggleHostAdvanced,
   openCompactSettings,
   expectCompactSettingsList,
@@ -313,7 +313,7 @@ test.describe("Settings sidebar navigation", () => {
     await openSettings(page);
     await openAddHostFlow(page);
     await expectAddHostMethodOptions(page);
-    await selectHostConnectionType(page, "direct");
+    await chooseDirectHostConnection(page);
 
     await fillDirectHostAddress(page, "example.paseo.test", "7443");
     await expectDirectHostSslDisabled(page);

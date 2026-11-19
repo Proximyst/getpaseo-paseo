@@ -23,15 +23,15 @@ describe("add host flow", () => {
     const added: string[] = [];
     flow.open({ onAdded: (id) => added.push(id) });
     const cancelled = flow.store.getState().session!;
-    cancelled.choose("scan");
+    cancelled.choose("ssh");
     cancelled.close();
     expect(flow.store.getState().session).toBeNull();
-    flow.open({ method: "link" });
+    flow.open({ method: "direct" });
     const current = flow.store.getState().session!;
     cancelled.complete({ serverId: "late-result" });
     cancelled.close();
     expect(flow.store.getState().session).toBe(current);
-    expect(current.step.getState()).toEqual({ method: "link" });
+    expect(current.step.getState()).toEqual({ method: "direct" });
     expect(added).toEqual([]);
     current.complete({ serverId: "new-host" });
     expect(flow.store.getState().session).toBeNull();

@@ -68,13 +68,11 @@ daemon 会在应用任何内容之前校验整个文件。它会应用运行时�
 paseo daemon restart
 ```
 
-运行时安全的设置包括：中继启用、MCP 设置、浏览器工具、主机名、CORS 来源、受信任的代理、Git 进程限制、Agent 和终端配置、Provider 定义、元数据生成、应用基础 URL、Provider 目录超时，以及全局插件开关。删除其中某个设置会应用该字段缺省时的行为；删除某个 Provider 会把它从之后的启动中移除。
+运行时安全的设置包括：MCP 设置、浏览器工具、主机名、CORS 来源、受信任的代理、Git 进程限制、Agent 和终端配置、Provider 定义、元数据生成、应用基础 URL、Provider 目录超时，以及全局插件开关。删除其中某个设置会应用该字段缺省时的行为；删除某个 Provider 会把它从之后的启动中移除。
 
-当你删除 `daemon.relay.enabled` 时，新的主目录会保持中继关闭。如果 daemon 启动时其配置就已经省略了这个字段，它会为了兼容而保持旧版的中继开启行为。编辑较旧的配置时，请显式设置 `daemon.relay.enabled`。
+空闲运行时清理、监听地址、身份验证、worktree 分配、服务代理地址、内置的 Web UI、日志、语音合成与识别、语音、凭据以及本地模型设置都需要重启。重新加载会先应用同一文件中的其他有效编辑，再报告这些路径。
 
-空闲运行时清理、监听地址、身份验证、中继端点和 TLS、worktree 分配、服务代理地址、内置的 Web UI、日志、语音合成与识别、语音、凭据以及本地模型设置都需要重启。重新加载会先应用同一文件中的其他有效编辑，再报告这些路径。
-
-部署环境变量和旧版进程管理器参数仍然具有最终决定权。当某个启动覆盖项阻止了文件中已更改的设置生效时，重新加载会在 `overrideControlledPaths` 下报告它。这包括启动设置，例如监听地址、密码、中继端点和 TLS、服务代理和 Web UI 设置、日志、语音合成与识别以及语音配置。主机名和 CORS 来源等列表设置仍然在各个来源之间追加，因此 `config.json` 中的值继续生效。要让文件中的值具有决定权，请停止该部署并在不带覆盖项的情况下重新启动。
+部署环境变量和旧版进程管理器参数仍然具有最终决定权。当某个启动覆盖项阻止了文件中已更改的设置生效时，重新加载会在 `overrideControlledPaths` 下报告它。这包括启动设置，例如监听地址、密码、服务代理和 Web UI 设置、日志、语音合成与识别以及语音配置。主机名和 CORS 来源等列表设置仍然在各个来源之间追加，因此 `config.json` 中的值继续生效。要让文件中的值具有决定权，请停止该部署并在不带覆盖项的情况下重新启动。
 
 ## Agent Provider {#agent-providers}
 
@@ -223,25 +221,11 @@ CLI 按以下顺序获取密码：
 
 URI 中的 `password=` 总是优先于环境变量，因此你可以全局设置 `PASEO_PASSWORD`，同时通过在 URI 中写明密码来连接另一个 daemon。
 
-在移动应用中，在直接连接的设置界面输入密码。
+在桌面端或网页版的直接连接设置中输入密码。
 
 ## 中继 {#relay}
 
-新的主目录会写入 `daemon.relay.enabled: false`。配对设备时，Paseo 会先询问再启用中继；已有的主目录保留其已保存的值。选择和配置连接方式见[连接方式](/docs/connectivity)，中继的加密模型见[安全](/docs/security)。
-
-在 `config.json` 中设置持久化的值：
-
-```json
-{
-  "daemon": {
-    "relay": {
-      "enabled": true
-    }
-  }
-}
-```
-
-`PASEO_RELAY_ENABLED=true|false` 会为前台部署覆盖文件中的值。托管的 `start` 使用文件中的值。在通过应用或 `paseo daemon pair --relay` 修改中继之前，请结束并重新启动部署以移除它的覆盖项。
+为保持与上游兼容，共享配置结构可能保留中继字段。本 fork 不支持中继连接或配对；`daemon.relay` 和 `PASEO_RELAY_*` 设置无法开启中继。请使用[直接连接或 SSH](/docs/connectivity)。
 
 ## 常用环境变量 {#common-env-vars}
 
@@ -249,7 +233,6 @@ URI 中的 `password=` 总是优先于环境变量，因此你可以全局设置
 - `PASEO_HOST`，设置 CLI 命令的 daemon 目标
 - `PASEO_PASSWORD`，在 daemon 上表示要求的密码（明文，启动时哈希）；在 CLI 上表示主机 URI 未包含密码时用于连接的密码
 - `PASEO_LISTEN`，覆盖 `daemon.listen`
-- `PASEO_RELAY_ENABLED`，为本次 daemon 启动启用或关闭出站中继
 - `PASEO_HOSTNAMES`，覆盖或扩展 `daemon.hostnames`
 - `PASEO_ALLOWED_HOSTS`，`PASEO_HOSTNAMES` 的已弃用别名
 - `PASEO_WEB_UI_ENABLED`，启用或关闭由 daemon 提供的 Web UI

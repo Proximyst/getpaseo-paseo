@@ -17,8 +17,7 @@ import "@/styles/unistyles";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { PortalProvider } from "@gorhom/portal";
 import { LucideProvider } from "lucide-react-native";
-import * as Linking from "expo-linking";
-import { Stack, useNavigationContainerRef, usePathname, useRouter } from "expo-router";
+import { Stack, useNavigationContainerRef, usePathname } from "expo-router";
 import {
   createContext,
   type ReactNode,
@@ -62,7 +61,6 @@ import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
 import { WorkspaceShortcutTargetsSubscriber } from "@/components/workspace-shortcut-targets-subscriber";
 import { FloatingPanelPortalHost } from "@/components/ui/floating-panel-portal";
 import { HostChooserModal, useHostChooser } from "@/hosts/host-chooser";
-import { HostConfirmationSheet } from "@/hosts/host-confirmation-sheet";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import {
   canDesktopAppSidebarShare,
@@ -141,7 +139,6 @@ import {
   WindowChromeSafeArea,
 } from "@/utils/desktop-window";
 import {
-  buildOpenProjectRoute,
   parseHostWorkspaceRouteFromPathname,
   parseServerIdFromPathname,
 } from "@/utils/host-routes";
@@ -573,7 +570,6 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <CommandCenter />
         <AddProjectFlowHost />
         <HostChooserModal />
-        <HostConfirmationSheet />
         <ProviderSettingsHost />
         <WorkspaceSetupDialog />
         <KeyboardShortcutsDialog />
@@ -700,7 +696,6 @@ function ProvidersWrapper({ children }: { children: ReactNode }) {
     <AppearanceProvider>
       <VoiceProvider>
         <DesktopWindowControlsSync />
-        <OfferLinkListener />
         <HostSessionManager />
         <FaviconStatusSync />
         {children}
@@ -723,40 +718,6 @@ function DesktopWindowControlsSync() {
       console.warn("[DesktopWindow] Failed to update window controls overlay", error);
     });
   }, [isLoading, surface0]);
-
-  return null;
-}
-
-function OfferLinkListener() {
-  const router = useRouter();
-
-  useEffect(() => {
-    let cancelled = false;
-    const handleUrl = async (url: string | null) => {
-      if (!url) return;
-      if (!url.includes("#offer=") && !url.includes("#connect=") && !url.startsWith("relay://"))
-        return;
-      try {
-        const result = await getHostRuntimeStore().importConnectionLink(url, "openProject");
-        if (!cancelled && result.status === "connected") router.replace(buildOpenProjectRoute());
-      } catch (error) {
-        console.warn("[OfferLinkListener] Pairing link failed", error);
-      }
-    };
-
-    void Linking.getInitialURL()
-      .then((url) => handleUrl(url))
-      .catch(() => undefined);
-
-    const subscription = Linking.addEventListener("url", (event) => {
-      void handleUrl(event.url);
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.remove();
-    };
-  }, [router]);
 
   return null;
 }
@@ -936,6 +897,7 @@ function RootStack() {
       <Stack.Screen name="settings/hosts/[serverId]/plugin-directory/[owner]/[slug]" />
       <Stack.Screen name="settings/hosts/[serverId]/projects/index" />
       <Stack.Screen name="settings/hosts/[serverId]/projects/[projectId]" />
+      <Stack.Screen name="settings/hosts/[serverId]/providers/[providerId]" />
     </ThemedStack>
   );
 }

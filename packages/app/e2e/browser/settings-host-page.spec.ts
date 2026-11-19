@@ -15,6 +15,9 @@ import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon
 import { getServerId } from "../support/helpers/server-id";
 import {
   expectSettingsHeader,
+  expectProviderNotOnHost,
+  expectProviderPageLoaded,
+  gotoProviderPage,
   openSettingsHost,
   openHostSection,
   expectHostLabelDisplayed,
@@ -34,7 +37,7 @@ import {
   removeHostFromHostPage,
   addDirectHostFromSettings,
   expectAddHostFieldDrawnAsInput,
-  selectHostConnectionType,
+  chooseDirectHostConnection,
   expectHostOnlineWithoutError,
   expectIdleAgentRelease,
   editRestartRecoveryPrompt,
@@ -264,6 +267,20 @@ test.describe("Settings host page", () => {
   });
 });
 
+test.describe("provider page from its URL", () => {
+  test("loads a provider's page on a cold visit", async ({ page }) => {
+    await gotoAppShell(page);
+    await gotoProviderPage(page, getServerId(), "claude");
+    await expectProviderPageLoaded(page, "Claude");
+  });
+
+  test("says a provider the host doesn't have isn't on this host", async ({ page }) => {
+    await gotoAppShell(page);
+    await gotoProviderPage(page, getServerId(), "not-a-provider");
+    await expectProviderNotOnHost(page);
+  });
+});
+
 test("restart recovery defaults off and persists opt-in and custom prompt", async ({ page }) => {
   const serverId = getServerId();
   await gotoAppShell(page);
@@ -312,18 +329,20 @@ async function closeAddHostAndChangeTheme(page: import("@playwright/test").Page)
 test("Add host draws its text fields as bordered inputs", async ({ page }) => {
   await gotoAppShell(page);
 
-  await test.step("the pairing link field", async () => {
-    await openSidebarAddHost(page);
-    await selectHostConnectionType(page, "relay");
-    await expectAddHostFieldDrawnAsInput(page, "pair-link-input");
-    await page.getByTestId("pair-link-cancel").click();
-  });
+  await openSidebarAddHost(page);
+  await expect(page.getByRole("button", { name: "Paste pairing link" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Scan QR code" })).toHaveCount(0);
 
   await test.step("the direct connection fields", async () => {
-    await selectHostConnectionType(page, "direct");
+    await chooseDirectHostConnection(page);
     await expectAddHostFieldDrawnAsInput(page, "direct-host-input");
     await expectAddHostFieldDrawnAsInput(page, "direct-port-input");
     await expectAddHostFieldDrawnAsInput(page, "direct-password-input");
+    await page.getByTestId("direct-host-advanced-toggle").click();
+    await expectAddHostFieldDrawnAsInput(page, "direct-host-uri-input");
+    await page.getByTestId("direct-host-uri-input").fill("relay://example.com:443/srv_old");
+    await page.getByTestId("direct-host-submit").click();
+    await expect(page.getByText("Connection URI protocol must be tcp:")).toBeVisible();
   });
 });
 

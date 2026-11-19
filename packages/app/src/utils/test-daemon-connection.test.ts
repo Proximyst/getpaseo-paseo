@@ -116,18 +116,14 @@ describe("test-daemon-connection connectToDaemon", () => {
     },
   );
 
-  it.each([
-    { id: "direct:lan:6767", type: "directTcp" as const, endpoint: "lan:6767" },
-    {
-      id: "relay:test",
-      type: "relay" as const,
-      relayEndpoint: "relay.paseo.sh:443",
-      daemonPublicKeyB64: "pubkey",
-    },
-  ])("adoptable $type probe clients use the app WebSocket factory", async (connection) => {
+  it("adoptable direct probe clients use the app WebSocket factory", async () => {
     const { connectToDaemon } = await import("./test-daemon-connection");
     const { createAppWebSocketFactory } = await import("@/runtime/websocket-factory");
-    const result = await connectToDaemon(connection, { serverId: "srv_probe_test" }, probe.deps);
+    const result = await connectToDaemon(
+      { id: "direct:lan:6767", type: "directTcp", endpoint: "lan:6767" },
+      { serverId: "srv_probe_test" },
+      probe.deps,
+    );
     try {
       expect(result.client.config.webSocketFactory).toBe(createAppWebSocketFactory());
     } finally {
@@ -283,36 +279,29 @@ describe("test-daemon-connection connectToDaemon", () => {
     expect(probe.createdConfigs()[0]?.trace).toBe(trace);
   });
 
-  it("uses relay TLS from the stored connection", async () => {
+  it("rejects saved relay and named pipe targets before creating a client", async () => {
     const { connectToDaemon } = await import("./test-daemon-connection");
-    const tlsResult = await connectToDaemon(
-      {
-        id: "relay:wss:[::1]:443",
-        type: "relay",
-        relayEndpoint: "[::1]:443",
-        useTls: true,
-        daemonPublicKeyB64: "pubkey",
-      },
-      { serverId: "srv_probe_test" },
-      probe.deps,
-    );
-    await tlsResult.client.close();
-
-    const plainResult = await connectToDaemon(
-      {
-        id: "relay:relay.paseo.sh:443",
-        type: "relay",
-        relayEndpoint: "relay.paseo.sh:443",
-        useTls: false,
-        daemonPublicKeyB64: "pubkey",
-      },
-      { serverId: "srv_probe_test" },
-      probe.deps,
-    );
-    await plainResult.client.close();
-
-    expect(probe.createdConfigs()[0]?.url).toMatch(/^wss:\/\/\[::1\]\/ws\?/);
-    expect(probe.createdConfigs()[1]?.url).toMatch(/^ws:\/\/relay\.paseo\.sh:443\/ws\?/);
+    await expect(
+      connectToDaemon(
+        {
+          id: "relay:wss:[::1]:443",
+          type: "relay",
+          relayEndpoint: "[::1]:443",
+          useTls: true,
+          daemonPublicKeyB64: "pubkey",
+        },
+        { serverId: "srv_probe_test" },
+        probe.deps,
+      ),
+    ).rejects.toThrow("Relay connections are not supported");
+    await expect(
+      connectToDaemon(
+        { id: "pipe:paseo", type: "directPipe", path: "\\\\.\\pipe\\paseo" },
+        { serverId: "srv_probe_test" },
+        probe.deps,
+      ),
+    ).rejects.toThrow("Windows named pipes are not supported");
+    expect(probe.createdConfigs()).toEqual([]);
   });
 
   it("surfaces auth rejection as an incorrect password", async () => {

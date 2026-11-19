@@ -1,12 +1,8 @@
-import { createContext, useCallback, useContext, useState, useMemo, type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { AddHostMethodModal } from "./internal/add-host-method-modal";
 import { AddHostModal } from "./internal/add-host-modal";
 import { AddRemoteSshHostModal } from "./internal/add-remote-ssh-host-modal";
-import { PairLinkModal } from "./internal/pair-link-modal";
-import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
-import { PairScanContent } from "./internal/scan";
 import { createAddHostFlow, type AddHostOptions, type AddHostSession } from "./internal/model";
 
 const Context = createContext<ReturnType<typeof createAddHostFlow> | null>(null);
@@ -31,18 +27,10 @@ export function useAddHost({ method, onAdded }: AddHostOptions = {}) {
 }
 
 function AddHostSessionView({ session }: { session: AddHostSession }) {
-  const { t } = useTranslation();
   const method = useStore(session.step, (state) => state.method);
   const back = useCallback(() => session.choose(null), [session]);
   const direct = useCallback(() => session.choose("direct"), [session]);
   const ssh = useCallback(() => session.choose("ssh"), [session]);
-  const link = useCallback(() => session.choose("link"), [session]);
-  const scan = useCallback(() => session.choose("scan"), [session]);
-  const scanned = useCallback((serverId: string) => session.complete({ serverId }), [session]);
-  const header = useMemo(
-    () => ({ title: t("pairing.scan.title"), back: { onPress: back } }),
-    [t, back],
-  );
   return (
     <>
       <AddHostMethodModal
@@ -50,8 +38,6 @@ function AddHostSessionView({ session }: { session: AddHostSession }) {
         onClose={session.close}
         onDirectConnection={direct}
         onRemoteSsh={ssh}
-        onPasteLink={link}
-        onScanQr={scan}
       />
       <AddHostModal
         visible={method === "direct"}
@@ -65,25 +51,6 @@ function AddHostSessionView({ session }: { session: AddHostSession }) {
         onCancel={back}
         onSaved={session.complete}
       />
-      <PairLinkModal
-        visible={method === "link"}
-        onClose={session.close}
-        onCancel={back}
-        onSaved={session.complete}
-      />
-      {method === "scan" ? (
-        <AdaptiveModalSheet
-          header={header}
-          visible
-          onClose={session.close}
-          scrollable={false}
-          snapPoints={SCAN_SNAP_POINTS}
-          desktopHeight="85%"
-        >
-          <PairScanContent onConnected={scanned} onClose={back} />
-        </AdaptiveModalSheet>
-      ) : null}
     </>
   );
 }
-const SCAN_SNAP_POINTS = ["90%"];

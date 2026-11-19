@@ -1,3 +1,4 @@
+import { AudioCaptureStartError } from "@/audio";
 import { resampleToPcm16 } from "@/audio/pcm";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parsePcm16Wav } from "@/utils/pcm16-wav";
@@ -140,6 +141,32 @@ async function finalizeRecorderStoppedPromise(input: {
   }
 }
 
+async function requestMicrophone(): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true,
+      },
+    });
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === "NotAllowedError") {
+        throw new AudioCaptureStartError("permissionDenied", error.message, { cause: error });
+      }
+      if (error.name === "NotFoundError") {
+        throw new AudioCaptureStartError("noMicrophone", error.message, { cause: error });
+      }
+      if (error.name === "NotSupportedError") {
+        throw new AudioCaptureStartError("unsupported", error.message, { cause: error });
+      }
+    }
+    throw error;
+  }
+}
+
 export function useDictationAudioSource(config: DictationAudioSourceConfig): DictationAudioSource {
   const [volume, setVolume] = useState(0);
   const captureAttemptRef = useRef(new AttemptGuard());
@@ -193,73 +220,47 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
     [],
   );
 
-  const emitPcmSegments = useCallback((pcm: Int16Array) => {
-    if (!isMicrophoneEnabled()) return;
-    const outputRate = 16000;
-    const chunkSamples = outputRate; // ~1s
-    let pending = pcm;
-    while (pending.length >= chunkSamples) {
-      const chunk = pending.slice(0, chunkSamples);
-      pending = pending.slice(chunkSamples);
-      onPcmSegmentRef.current(int16ToBase64(chunk));
-    }
-    if (pending.length > 0) {
-      onPcmSegmentRef.current(int16ToBase64(pending));
+  const emitPcmSegments = useCallback((pcm: Int16Array, canEmit: () => boolean) => {
+    const chunkSamples = 16000; // ~1s
+    for (let offset = 0; offset < pcm.length && canEmit(); offset += chunkSamples) {
+      onPcmSegmentRef.current(int16ToBase64(pcm.subarray(offset, offset + chunkSamples)));
     }
   }, []);
 
   const start = useCallback(async () => {
     if (refs.current.started && isMicrophoneEnabled()) return;
-    const attemptId = captureAttemptRef.current.next();
-    await requireMicrophoneEnabled();
-    captureAttemptRef.current.assertCurrent(attemptId);
-    const missingNavigator =
-      typeof navigator === "undefined" ||
-      !navigator.mediaDevices ||
-      typeof navigator.mediaDevices.getUserMedia !== "function";
-
-    const secureContext =
-      typeof window !== "undefined" && typeof window.isSecureContext === "boolean"
-        ? window.isSecureContext
-        : true;
-    const currentOrigin =
-      typeof window !== "undefined" && window.location ? window.location.origin : "unknown";
-    const isDesktopApp = isElectronRuntime();
-
-    if (missingNavigator) {
-      throw new Error("Microphone capture is not supported in this environment");
-    }
-    if (!secureContext && !isDesktopApp) {
-      throw new Error(
-        `Microphone access requires HTTPS or localhost. Current origin: ${currentOrigin}`,
-      );
-    }
-    if (!secureContext && isDesktopApp) {
-      console.warn(
-        "[DictationAudio][Web] Insecure context reported under Desktop; attempting getUserMedia anyway",
-        { currentOrigin },
+    const attempt = captureAttemptRef.current;
+    const attemptId = attempt.next();
+    await requireMicrophoneEnabled().catch((error) => {
+      attempt.assertCurrent(attemptId);
+      throw error;
+    });
+    attempt.assertCurrent(attemptId);
+    if (!isMicrophoneEnabled()) throw new AttemptCancelledError();
+    if (typeof window !== "undefined" && window.isSecureContext === false && !isElectronRuntime()) {
+      throw new AudioCaptureStartError(
+        "insecureContext",
+        `Microphone access requires HTTPS or localhost. Current origin: ${window.location.origin}`,
       );
     }
 
     const AudioContextCtor = getAudioContextCtor();
-    if (!AudioContextCtor) {
-      throw new Error("AudioContext unavailable");
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      !AudioContextCtor
+    ) {
+      throw new AudioCaptureStartError("unsupported", "Browser audio capture is unavailable.");
     }
 
-    const rawStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        noiseSuppression: true,
-        echoCancellation: true,
-        autoGainControl: true,
-      },
+    const stream = await requestMicrophone().catch((error) => {
+      attempt.assertCurrent(attemptId);
+      throw error;
     });
-    if (!captureAttemptRef.current.isCurrent(attemptId) || !isMicrophoneEnabled()) {
-      rawStream.getTracks().forEach((track) => track.stop());
+    if (!attempt.isCurrent(attemptId) || !isMicrophoneEnabled()) {
+      disconnectDictationAudioGraph({ stream, source: null, processor: null, gain: null });
       throw new AttemptCancelledError();
     }
-
-    const stream = rawStream;
     refs.current.stream = stream;
     try {
       const context = new AudioContextCtor();
@@ -454,9 +455,7 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
             stoppedPromise: recorder.stoppedPromise,
             context,
             decodeAudioData,
-            emitPcmSegments: (pcm) => {
-              if (canEmit()) emitPcmSegments(pcm);
-            },
+            emitPcmSegments: (pcm) => emitPcmSegments(pcm, canEmit),
             onError: (error) => {
               if (canEmit()) onErrorRef.current?.(error);
             },
@@ -487,15 +486,7 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
 
   return useMemo(
     () => ({
-      start: async () => {
-        try {
-          await start();
-        } catch (err) {
-          const normalized = err instanceof Error ? err : new Error(String(err));
-          onErrorRef.current?.(normalized);
-          throw normalized;
-        }
-      },
+      start,
       stop,
       volume,
       isPaused: false,

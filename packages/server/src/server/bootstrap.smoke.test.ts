@@ -916,6 +916,29 @@ export default function contribute(plugin: unknown) {
     });
   });
 
+  test("refuses Windows named pipes for both the daemon and service proxy listeners", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-pipe-"));
+    try {
+      const config = loadConfig(paseoHome, { env: {} });
+      const logger = pino({ level: "silent" });
+      const pipe = String.raw`\\.\pipe\paseo-managed-test`;
+      await expect(createPaseoDaemon({ ...config, listen: pipe }, logger)).rejects.toThrow(
+        "Windows named pipes are not supported",
+      );
+      await expect(
+        createPaseoDaemon(
+          {
+            ...config,
+            serviceProxy: { publicBaseUrl: null, standaloneListen: `pipe://${pipe}` },
+          },
+          logger,
+        ),
+      ).rejects.toThrow("Windows named pipes are not supported");
+    } finally {
+      await rm(paseoHome, { recursive: true, force: true });
+    }
+  });
+
   // POSIX-only: Unix socket listen paths are invalid Windows listen targets.
   test.skipIf(isPlatform("win32"))(
     "does not generate a relay pairing offer for unix socket listeners",

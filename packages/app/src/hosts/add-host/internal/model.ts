@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 
-export type AddHostMethod = "direct" | "ssh" | "link" | "scan";
+export type AddHostMethod = "direct" | "ssh";
 export interface AddHostOptions {
   method?: AddHostMethod;
   onAdded?: (serverId: string) => void;

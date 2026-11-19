@@ -886,91 +886,79 @@ test("disabling or removing a host cancels its pending capability retry", async 
   expect(destination.connections()).toBe(connections);
 });
 
-import {
-  createDaemonChannel,
-  exportPublicKey,
-  generateKeyPair,
-  openDaemonSecureChannel,
-  type Transport,
-} from "@getpaseo/relay/e2ee";
-test("a capability retry over a relay keeps the protected endpoint security it negotiated", async () => {
-  const keys = generateKeyPair();
-  const legacyReceived: unknown[] = [];
-  let connections = 0;
-  let retryClosed = false;
-  const http = createServer();
-  const ws = new WebSocketServer({ server: http });
-  ws.on("connection", (socket) => {
-    connections++;
-    const wire: Transport = {
-      send: (data) => socket.send(data),
-      close: (code, reason) => socket.close(code, reason),
-      onmessage: null,
-      onclose: null,
-      onerror: null,
-    };
-    socket.on("message", (data, isBinary) => {
-      const bytes = Buffer.from(data as Buffer);
-      wire.onmessage?.({
-        data: isBinary
-          ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-          : bytes.toString(),
-        isBinary,
-      });
-    });
-    socket.on("close", (code, reason) => wire.onclose?.(code, reason.toString()));
-    if (connections > 1) {
-      socket.on("close", () => {
-        retryClosed = true;
-      });
-      void createDaemonChannel(wire, keys, {
-        onmessage: (data) => legacyReceived.push(data),
-      }).catch(() => {});
-      return;
-    }
-    const channel = openDaemonSecureChannel(wire, {
-      daemonKeyPair: keys,
-      events: {
-        onmessage: (data) => {
-          if (typeof data !== "string" || JSON.parse(data).type !== "hello") return;
-          void channel.then((secure) =>
-            secure.send(
-              JSON.stringify({
-                type: "session",
-                message: {
-                  type: "status",
-                  payload: {
-                    status: "server_info",
-                    serverId: "srv_relayed",
-                    hostname: "relayed",
-                    version: "0.12.0",
-                  },
-                },
-              }),
-            ),
-          );
-        },
-      },
-    });
-    void channel.catch(() => {});
-  });
-  http.listen(0, "127.0.0.1");
-  await once(http, "listening");
-  cleanup.push(async () => {
-    for (const socket of ws.clients) socket.terminate();
-    await new Promise<void>((resolve) => ws.close(() => resolve()));
-    await new Promise<void>((resolve) => http.close(() => resolve()));
-  });
-  const address = http.address();
-  if (!address || typeof address === "string") throw new Error("Missing relay port");
+const unsupportedConnections = [
+  "relay://127.0.0.1:6767/srv_saved?key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D",
+  "ws://127.0.0.1:6767/ws?role=client&serverId=srv_saved&v=2",
+  "pipe://\\\\.\\pipe\\paseo",
+];
+
+test("refuses to add or replace a registration with relay or Windows named pipes", async () => {
   const a = await daemon();
   const { paseo } = await api(a);
-  await paseo.hosts.add({
-    connection: `relay://127.0.0.1:${address.port}/srv_relayed?key=${encodeURIComponent(exportPublicKey(keys.publicKey))}`,
-  });
-  await capabilityRetry(paseo);
-  await expect.poll(() => retryClosed, { timeout: 15000 }).toBe(true);
-  expect(legacyReceived).toEqual([]);
+  for (const connection of unsupportedConnections) {
+    await expect(paseo.hosts.add({ connection })).rejects.toMatchObject({
+      code: "invalid_connection",
+      message: expect.stringContaining("not supported"),
+    });
+  }
+  expect((await paseo.hosts.list()).hosts).toEqual([]);
+
+  const saved = await paseo.hosts.add({ connection: "127.0.0.1:1" });
+  for (const connection of unsupportedConnections) {
+    await expect(paseo.hosts.update(saved.registrationId, { connection })).rejects.toMatchObject({
+      code: "invalid_connection",
+      message: expect.stringContaining("not supported"),
+    });
+  }
+  expect(JSON.parse(await readFile(join(a.paseoHome, "hosts.json"), "utf8"))).toEqual([
+    expect.objectContaining({ registrationId: saved.registrationId, connection: "127.0.0.1:1" }),
+  ]);
+});
+
+test("legacy unsupported registrations stay removable without blocking other saved hosts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "hosts-unsupported-"));
+  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const home = join(root, ".paseo");
+  await mkdir(home);
+  const b = await daemon();
+  const directConnection = `127.0.0.1:${b.port}`;
+  const rows = [...unsupportedConnections, directConnection, "ssh://deploy@localhost"].map(
+    (connection, index) => ({
+      connection,
+      registrationId: `hst_${index}`,
+      serverId: null,
+      label: null,
+      source: { id: "owner", key: String(index) },
+      metadata: {},
+      enabled: index !== unsupportedConnections.length + 1,
+      status: "connecting",
+      targetDescription: "Saved destination",
+      lastOnlineAt: null,
+      nextRetryAt: null,
+      error: null,
+    }),
+  );
+  await writeFile(join(home, "hosts.json"), JSON.stringify(rows));
+  const a = await daemon({ paseoHomeRoot: root });
+  const { paseo } = await api(a);
+
+  const hosts = await paseo.hosts.list();
+  for (const row of hosts.hosts.slice(0, unsupportedConnections.length)) {
+    expect(row).toMatchObject({
+      status: "error",
+      error: { code: "invalid_connection" },
+      nextRetryAt: null,
+    });
+    await paseo.hosts.update(row.registrationId, { enabled: false });
+    await expect(paseo.hosts.update(row.registrationId, { enabled: true })).rejects.toMatchObject({
+      code: "invalid_connection",
+    });
+    await paseo.hosts.remove(row.registrationId);
+  }
+  expect((await online(paseo)).hosts).toEqual([
+    expect.objectContaining({ serverId: b.daemon.getServerId(), status: "online" }),
+    expect.objectContaining({ status: "disabled" }),
+  ]);
 });
 
 test("an unreachable saved target becomes online after its daemon starts without being added again", async () => {

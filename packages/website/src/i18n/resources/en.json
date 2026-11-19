@@ -124,6 +124,18 @@
       "metaTitle": "Antigravity Mobile and Desktop App, Open Source",
       "metaDescription": "Run your installed Antigravity CLI through Paseo. Watch agents work and review changes from your phone or desktop. Self-hosted, your code stays on your machine."
     },
+    "fx": {
+      "title": "Open source app for fx",
+      "subtitle": "Run Vercel Labs' fx on your machine and control it from your browser or the Linux desktop app.",
+      "metaTitle": "fx Web and Linux Desktop App, Open Source",
+      "metaDescription": "Run your installed fx CLI through Paseo's web UI or Linux desktop app. Watch agents work and review changes. Self-hosted."
+    },
+    "hoplite": {
+      "title": "Open source app for Hoplite",
+      "subtitle": "Control Hoplite's cloud coding agent alongside your other agents from your browser or the Linux desktop app.",
+      "metaTitle": "Hoplite Web and Linux Desktop App, Open Source",
+      "metaDescription": "Start Hoplite's cloud coding agent through your installed Hoplite CLI, then watch it work and review changes in Paseo's web UI or Linux desktop app."
+    },
     "copilot": {
       "title": "Open source app for GitHub Copilot",
       "subtitle": "Drive GitHub Copilot from your phone or desktop. Same account, same machine, ship without sitting down at your desk.",
@@ -333,7 +345,7 @@
     "metaTitle": "Supported agents – Every coding agent Paseo runs",
     "metaDescription": "Run Claude Code, Codex, OpenCode, Pi, OMP, Cursor, Muse Code, Antigravity, and dozens more coding agents from your phone. Self-hosted, your code stays on your machine.",
     "title": "Supported agents",
-    "intro": "Paseo supports many agents natively, it can run any <acp>ACP agent</acp> and you can implement new providers via <plugins>plugins</plugins>."
+    "intro": "Paseo supports many agents natively. It also runs any <acp>ACP agent</acp>, and you can add new providers with <plugins>plugins</plugins>."
   },
   "landing": {
     "socialProof": {

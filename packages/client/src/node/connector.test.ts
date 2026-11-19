@@ -77,19 +77,28 @@ test("direct connector preserves 25 MiB binary frames in both directions", async
 });
 
 test.each([
-  "relay://127.0.0.1:6767/srv_saved?key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D",
-  "ws://127.0.0.1:6767/ws?role=client&serverId=srv_saved&v=2",
-])("refuses relay targets at both public host connector boundaries (%s)", (connection) => {
-  expect(() => createHostTransportFactory(connection)).toThrow(
-    "Relay connections are not supported",
-  );
-  expect(() =>
-    createHostClient(connection, {
-      clientId: "clsk_disabled_relay",
-      // An injected factory must not bypass target policy.
-      transportFactory: () => {
-        throw new Error("Transport should not be constructed");
-      },
-    }),
-  ).toThrow("Relay connections are not supported");
-});
+  [
+    "relay://127.0.0.1:6767/srv_saved?key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D",
+    /Relay connections are not supported/,
+  ],
+  [
+    "ws://127.0.0.1:6767/ws?role=client&serverId=srv_saved&v=2",
+    /Relay connections are not supported/,
+  ],
+  ["pipe://\\\\.\\pipe\\paseo", /Windows named pipes are not supported/],
+  ["\\\\.\\pipe\\paseo", /Windows named pipes are not supported/],
+])(
+  "refuses unsupported targets at both public host connector boundaries (%s)",
+  (connection, error) => {
+    expect(() => createHostTransportFactory(connection)).toThrow(error);
+    expect(() =>
+      createHostClient(connection, {
+        clientId: "clsk_disabled_transport",
+        // An injected factory must not bypass target policy.
+        transportFactory: () => {
+          throw new Error("Transport should not be constructed");
+        },
+      }),
+    ).toThrow(error);
+  },
+);

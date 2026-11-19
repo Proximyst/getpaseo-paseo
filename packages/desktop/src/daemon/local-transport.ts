@@ -471,6 +471,9 @@ export function createLocalTransportManager(
 
   function open(rawInput: unknown): void {
     const { sessionId, target } = parseOpenTransportSessionInput(rawInput);
+    if (target.transportType === "pipe") {
+      throw new Error("Windows named pipes are not supported. Use a Unix socket.");
+    }
     if (sessions.has(sessionId)) {
       throw new Error(`Local transport session already exists: ${sessionId}`);
     }

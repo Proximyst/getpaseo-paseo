@@ -21,66 +21,46 @@ describe("daemon relay config", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
-  test("preserves implicit relay-on for a legacy config without enabled", async () => {
-    const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
-    expect(loadConfig(home, { env: {} }).relayEnabled).toBe(true);
-  });
+  test.each([undefined, false, true])(
+    "keeps persisted relay enablement %s disabled and immutable",
+    async (enabled) => {
+      const home = await createPaseoHome({ version: 1, daemon: { relay: { enabled } } });
+      const config = loadConfig(home, { env: {} });
+      expect(config.relayEnabled).toBe(false);
+      expect(config.relayEnabledMutable).toBe(false);
+    },
+  );
 
-  test("keeps explicit persisted relay state and marks it mutable", async () => {
-    const home = await createPaseoHome({
-      version: 1,
-      daemon: { relay: { enabled: false } },
-    });
-    const config = loadConfig(home, { env: {} });
-    expect(config.relayEnabled).toBe(false);
-    expect(config.relayEnabledMutable).toBe(true);
-  });
+  test.each([undefined, true])(
+    "keeps relay disabled when a reload sets enabled to %s",
+    async (enabled) => {
+      const home = await createPaseoHome({ version: 1, daemon: { relay: { enabled: false } } });
+      const startup = loadConfig(home, { env: {} });
+      const reloaded = resolveConfigFromPersisted(
+        home,
+        { version: 1, daemon: { relay: { enabled } } },
+        {
+          env: startup.configReload?.env,
+          relayEnabledFallback: startup.configReload?.relayEnabledFallback,
+        },
+      );
 
-  test("removing enabled from a modern config keeps relay disabled", async () => {
-    const home = await createPaseoHome({
-      version: 1,
-      daemon: { relay: { enabled: false } },
-    });
-    const startup = loadConfig(home, { env: {} });
-    const reloaded = resolveConfigFromPersisted(
-      home,
-      { version: 1, daemon: { relay: {} } },
-      {
-        env: startup.configReload?.env,
-        relayEnabledFallback: startup.configReload?.relayEnabledFallback,
-      },
-    );
+      expect(reloaded.relayEnabled).toBe(false);
+    },
+  );
 
-    expect(reloaded.relayEnabled).toBe(false);
-  });
-
-  test("legacy configs retain relay-on compatibility when enabled remains absent", async () => {
-    const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
-    const startup = loadConfig(home, { env: {} });
-    const reloaded = resolveConfigFromPersisted(
-      home,
-      { version: 1, daemon: { relay: {} } },
-      {
-        env: startup.configReload?.env,
-        relayEnabledFallback: startup.configReload?.relayEnabledFallback,
-      },
-    );
-
-    expect(reloaded.relayEnabled).toBe(true);
-  });
-
-  test("marks environment relay overrides immutable", async () => {
-    const home = await createPaseoHome({
-      version: 1,
-      daemon: { relay: { enabled: false } },
-    });
-    const config = loadConfig(home, { env: { PASEO_RELAY_ENABLED: "true" } });
-    expect(config.relayEnabled).toBe(true);
-    expect(config.relayEnabledMutable).toBe(false);
+  test("cannot enable relay through an environment or CLI override", async () => {
+    const home = await createPaseoHome({ version: 1, daemon: { relay: { enabled: false } } });
+    const fromEnv = loadConfig(home, { env: { PASEO_RELAY_ENABLED: "true" } });
+    const fromCli = loadConfig(home, { env: {}, cli: { relayEnabled: true } });
+    expect(fromEnv.relayEnabled).toBe(false);
+    expect(fromEnv.relayEnabledMutable).toBe(false);
+    expect(fromCli.relayEnabled).toBe(false);
+    expect(fromCli.relayEnabledMutable).toBe(false);
   });
 
   test.each(["", "treu"])(
-    "ignores invalid relay override %j without locking config",
+    "keeps relay disabled and immutable for invalid environment value %j",
     async (value) => {
       const home = await createPaseoHome({
         version: 1,
@@ -88,7 +68,7 @@ describe("daemon relay config", () => {
       });
       const config = loadConfig(home, { env: { PASEO_RELAY_ENABLED: value } });
       expect(config.relayEnabled).toBe(false);
-      expect(config.relayEnabledMutable).toBe(true);
+      expect(config.relayEnabledMutable).toBe(false);
     },
   );
 
