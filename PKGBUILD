@@ -2,7 +2,7 @@
 # https://aur.archlinux.org/packages/paseo-desktop-git
 
 pkgname=paseo-proximyst-git
-pkgver=0.16.1.r6636.ga3c41ecc1
+pkgver=0.16.1.r6637.g110a99dbd
 pkgrel=1
 pkgdesc='Linux desktop and CLI for local AI coding agents (Proximyst fork)'
 arch=('x86_64')
@@ -65,12 +65,13 @@ conflicts=(
   'paseo-desktop-git'
   'paseo-desktop-git-bin'
 )
-source=('paseo::git+https://github.com/Proximyst/getpaseo-paseo.git#branch=main')
-sha256sums=('SKIP')
+# Build directly from the checkout containing this recipe.
+source=()
+sha256sums=()
 options=('!strip' '!debug')
 
 pkgver() {
-  cd "$srcdir/paseo" || return
+  cd "$startdir" || return
   local version
   # Preserve every prerelease/build identifier, replacing Arch-forbidden hyphens.
   version=$(node -p "require('./package.json').version.replace(/[-+]/g, '.')")
@@ -80,6 +81,8 @@ pkgver() {
 _build_environment() {
   export npm_config_cache="$srcdir/npm-cache"
   export npm_config_devdir="$srcdir/node-gyp"
+  # Repository patches and native dependency installation require npm hooks.
+  export npm_config_ignore_scripts=false
   export XDG_CACHE_HOME="$srcdir/cache"
   export ELECTRON_CACHE="$srcdir/electron-cache"
   export ELECTRON_BUILDER_CACHE="$srcdir/electron-builder-cache"
@@ -97,20 +100,20 @@ _build_environment() {
 }
 
 prepare() {
-  cd "$srcdir/paseo" || return
+  cd "$startdir" || return
   _build_environment
   npm ci --no-audit --no-fund
 }
 
 build() {
-  cd "$srcdir/paseo" || return
+  cd "$startdir" || return
   _build_environment
   export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=8192"
   npm run build:desktop -- --publish never --linux dir --x64
 }
 
 package() {
-  cd "$srcdir/paseo" || return
+  cd "$startdir" || return
   local unpacked='packages/desktop/release/linux-unpacked'
   local file
 

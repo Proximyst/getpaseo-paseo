@@ -9,13 +9,15 @@ This fork is developed on Linux for Linux desktop, browser/web UI, and CLI. Use 
 
 ## Arch Linux package
 
-The root `PKGBUILD` builds `paseo-proximyst-git` from this fork's `main` branch. Install `base-devel`, Git, Node.js, npm, and Python, then run from the repository root:
+The root `PKGBUILD` builds `paseo-proximyst-git` directly in the local checkout, including uncommitted changes. Install `base-devel`, Git, Node.js, npm, and Python, then run from the repository root:
 
 ```sh
 makepkg -si
 ```
 
-`makepkg` fetches the published fork source; it does not package uncommitted changes in your working tree. The build downloads npm dependencies and the pinned Electron runtime. It uses the existing desktop build rather than the system-Electron patches carried by the [official AUR package](https://aur.archlinux.org/packages/paseo).
+`makepkg` does not clone or fetch source. Dependency installation and builds run in the checkout containing the recipe: `npm ci` replaces its `node_modules`, and build commands write their normal outputs there. npm dependencies and the pinned Electron runtime are still downloaded. The recipe uses the existing desktop build rather than the system-Electron patches carried by the [official AUR package](https://aur.archlinux.org/packages/paseo).
+
+The recipe enables npm lifecycle scripts even if your npm configuration disables them. They apply the repository's dependency patches and install native modules; skipping them can leave an unusable desktop bundle.
 
 The package includes the desktop app, its managed daemon, browser assets, and CLI. Launch the desktop app with `paseo-desktop`, or use `paseo` for the CLI. It conflicts with upstream Paseo packages that install the same commands. Installation does not start the app or enable a daemon service.
 

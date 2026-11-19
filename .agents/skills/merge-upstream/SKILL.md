@@ -37,7 +37,7 @@ The `@getpaseo/relay` workspace also contains shared cryptography. Its continued
 - Resolve shared-file conflicts by integrating upstream logic while retaining disabled fork policy. Do not choose all of `ours` or `theirs` for a shared file.
 - Inspect root and workspace manifests, lockfile workspace entries, `.github/`, `scripts/`, desktop packaging, Expo config, relay configuration, pairing, client transport selection, and add-host UI.
 - Keep Linux desktop, browser, CLI, direct, SSH, and Unix-socket entrypoints working. Do not confuse removing relay with removing all remote access.
-- Preserve the fork's root `PKGBUILD` and `packaging/arch/` integration. Keep its source URL on `Proximyst/getpaseo-paseo`, its bundled Electron version aligned with the desktop build, and its launcher/CLI resources and sandbox permissions intact. Arch packaging is supported; it does not restore Nix.
+- Preserve the fork's root `PKGBUILD` and `packaging/arch/` integration. Keep builds in the local checkout, including uncommitted changes, without cloning or fetching source; see [Arch packaging](../../../docs/development.md#arch-linux-package). Keep its bundled Electron version aligned with the desktop build, and its launcher/CLI resources and sandbox permissions intact. Arch packaging is supported; it does not restore Nix.
 - Do not narrow or delete wire schemas to enforce product policy. Keep protocol compatibility and refuse unsupported operations at runtime boundaries.
 - Refresh the npm lockfile through npm after manifest changes; do not hand-edit its dependency graph.
 - Integrate documentation into the owning sections. Historical changelog entries and retained shared-source platform references are not active support promises.
