@@ -6,7 +6,13 @@ build/
 dist/
 .next/
 out/
-result
+
+# Arch package builds
+/src/
+/pkg/
+/paseo/
+/*.pkg.tar.*
+/*.src.tar.*
 
 # Environment variables
 .env

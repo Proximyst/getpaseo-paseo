@@ -10,6 +10,8 @@ category: Getting started
 
 These projects are related to Paseo and built by the community.
 
+This is an upstream community directory, not this fork's support or installation inventory. External projects targeting Docker, macOS, or other removed platforms are listed as upstream context only; compatibility with this Linux desktop/browser/CLI fork is not implied. Use [Getting started](/docs) for supported installation paths.
+
 ## Plugins
 
 Browse the [plugin registry](/plugins) for reviewed community plugins. To share your own, follow

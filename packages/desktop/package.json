@@ -13,13 +13,15 @@
     "type": "git",
     "url": "https://github.com/getpaseo/paseo.git"
   },
+  "os": [
+    "linux"
+  ],
   "main": "dist/main.js",
   "scripts": {
-    "build": "npm --prefix ../.. run build:server:clean && npm run build:main && electron-builder --config electron-builder.yml",
-    "build:main": "tsc -p tsconfig.json",
+    "build": "node scripts/check-platform.js && npm --prefix ../.. run build:server:clean && npm run build:main && electron-builder --linux --config electron-builder.yml",
+    "build:main": "node scripts/check-platform.js && tsc -p tsconfig.json",
     "capture-harness": "npm run build:main && ./capture-harness/run.sh",
     "dev": "./scripts/dev.sh",
-    "dev:win": "powershell ./scripts/dev.ps1",
     "test:e2e:renderer": "cross-env E2E_DESKTOP_RUNTIME=1 playwright test --config=playwright.config.ts --project=desktop",
     "test:e2e:browser-tabs": "npm run build:main && node ./e2e/browser-tabs.e2e.mjs",
     "verify:electron-cdp": "node ./scripts/verify-electron-cdp.mjs",

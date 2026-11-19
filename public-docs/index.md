@@ -8,13 +8,13 @@ category: Getting started
 
 # Getting started
 
-Paseo is an agentic development environment for running coding agents, editing files, reviewing changes, and testing your work. Agents run on your machines; desktop, mobile, web, and CLI clients let you work from anywhere. Choose how to install it below.
+This fork of Paseo is an agentic development environment for running coding agents, editing files, reviewing changes, and testing your work. Agents run on your Linux machines; Linux desktop, browser/web UI, and CLI clients connect directly or over SSH. Docker, native mobile apps, relay, Windows, and macOS are not supported.
 
-## Desktop app (recommended)
+## Linux desktop app (recommended)
 
-Download from [paseo.sh/download](https://paseo.sh/download) or the [GitHub releases page](https://github.com/getpaseo/paseo/releases). Open it and you're done.
+Install a Linux desktop package from this fork's releases, or build it from source using the repository's development guide. Upstream downloads at paseo.sh and getpaseo/paseo are not fork builds.
 
-The desktop app bundles its own daemon and starts it automatically, no separate install required. On first launch you'll see a brief startup screen, then connect from your phone using **Settings → your host → Pair Device**.
+The desktop app bundles its own daemon and starts it automatically; no separate daemon install is required.
 
 ## Server / CLI
 
@@ -25,34 +25,16 @@ npm install -g @getpaseo/cli
 paseo
 ```
 
-Paseo starts the daemon locally, then asks whether to enable the end-to-end encrypted relay and print a pairing QR code. If you decline, enter the daemon address manually over TCP, Tailscale, or another VPN.
+Paseo starts the daemon locally. Use the desktop app or CLI on the same machine, connect directly over a trusted LAN/VPN, or use SSH from the desktop app or CLI. Relay pairing is unavailable.
 
 The daemon can also serve the browser web app itself, so you can use the full UI without the hosted app. See [Self-hosting the web UI](/docs/web-ui).
 
 Configuration and local state live under `PASEO_HOME` (defaults to `~/.paseo`).
 
-## Docker
-
-For servers, dev boxes, NAS devices, or homelab hosts, run the official image:
-
-```bash
-docker run -d --name paseo \
-  -p 6767:6767 \
-  -e PASEO_PASSWORD=change-me \
-  -v "$PWD/paseo-home:/home/paseo" \
-  -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
-```
-
-Then open `http://localhost:6767`.
-
-The image runs the daemon and serves the bundled web UI. It does not bundle agent CLIs, so extend it with the agents you use. See [Docker](/docs/docker) for Compose, reverse proxy, agent install, and security examples.
-
 ## Where next
 
 - [Run parallel tasks](/docs/parallel-development), use separate worktrees, review diffs, and test changes in the desktop app.
-- [Connectivity](/docs/connectivity), connect through the relay or Tailscale.
-- [Docker](/docs/docker), run the daemon and bundled web UI in a container.
+- [Connectivity](/docs/connectivity), connect directly, through SSH, or over Tailscale.
 - [Workspaces](/docs/workspaces), the project, workspace, and session model Paseo is built around.
 - [Providers](/docs/providers), what a provider is and how Paseo wraps existing CLIs.
 - [Orchestration](/docs/orchestration), let one agent delegate work to other providers and models.

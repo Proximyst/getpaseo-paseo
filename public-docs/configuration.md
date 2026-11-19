@@ -24,7 +24,7 @@ You can change the home directory by setting `PASEO_HOME` or selecting `--home` 
 
 Managed `start` and Desktop use defaults, then `config.json`. Inherited daemon-setting environment variables are removed from their launches.
 
-Foreground `paseo daemon run`, Docker, and direct supervisor launches apply environment variables after the file. Existing legacy supervisor flags retain their precedence across worker restart. Changing deployment overrides requires stopping and relaunching that deployment. Lists append across sources, including hostnames and CORS origins.
+Foreground `paseo daemon run` and direct supervisor launches apply environment variables after the file. Existing legacy supervisor flags retain their precedence across worker restart. Changing deployment overrides requires stopping and relaunching that deployment. Lists append across sources, including hostnames and CORS origins.
 
 ## Example
 
@@ -70,13 +70,11 @@ The daemon validates the complete file before applying anything. It applies runt
 paseo daemon restart
 ```
 
-Runtime-safe settings include relay enablement, MCP settings, browser tools, hostnames, CORS origins, trusted proxies, Git process limits, agent and terminal profiles, provider definitions, metadata generation, the app base URL, provider catalog timeout, and the global plugin switch. Removing one of these settings applies its omitted-field behavior; removing a provider removes it from future launches.
+Runtime-safe settings include MCP settings, browser tools, hostnames, CORS origins, trusted proxies, Git process limits, agent and terminal profiles, provider definitions, metadata generation, the app base URL, provider catalog timeout, and the global plugin switch. Removing one of these settings applies its omitted-field behavior; removing a provider removes it from future launches.
 
-New homes keep relay disabled when you remove `daemon.relay.enabled`. A daemon whose config already omitted this field when it started keeps the legacy relay-enabled behavior for compatibility. Set `daemon.relay.enabled` explicitly when editing an older config.
+Idle runtime cleanup, listen addresses, authentication, worktree allocation, service-proxy addresses, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
 
-Idle runtime cleanup, listen addresses, authentication, relay endpoints and TLS, worktree allocation, service-proxy addresses, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
-
-Deployment environment variables and legacy supervisor flags remain authoritative. Reload reports a changed file setting under `overrideControlledPaths` when a launch override prevents it from taking effect. This includes startup settings such as listen addresses, passwords, relay endpoints and TLS, service-proxy and web UI settings, logging, speech, and voice configuration. List settings such as hostnames and CORS origins still append across sources, so values from `config.json` continue to apply. Stop and relaunch the deployment without the override to make the file value authoritative.
+Deployment environment variables and legacy supervisor flags remain authoritative. Reload reports a changed file setting under `overrideControlledPaths` when a launch override prevents it from taking effect. Stop and relaunch the deployment without the override to make the file value authoritative.
 
 ## Agent providers
 
@@ -122,7 +120,7 @@ For voice philosophy, architecture, and complete local/OpenAI setup examples, se
 
 ## Bundled web UI
 
-The daemon can serve the browser web client from the same HTTP server. This is enabled in the official Docker image and disabled by default for normal CLI and desktop-managed daemons.
+The daemon can serve the browser web client from the same HTTP server. This is disabled by default for CLI and desktop-managed daemons.
 
 Enable it from the CLI:
 
@@ -195,7 +193,7 @@ This prompts for a password, writes the bcrypt hash to `config.json`, and tells 
 Alternatively, set the `PASEO_PASSWORD` environment variable (plaintext, hashed automatically at startup):
 
 ```bash
-PASEO_PASSWORD=my-secret paseo daemon start
+PASEO_PASSWORD=my-secret paseo daemon run
 ```
 
 Or write the hash directly in `config.json`:
@@ -231,25 +229,11 @@ The CLI picks up a password from, in order:
 
 A `password=` in the URI always wins over the env var, so you can keep `PASEO_PASSWORD` set globally and still target a different daemon by spelling its password into the URI.
 
-In the mobile app, enter the password in the direct connection setup screen.
+In the desktop or browser app, enter the password in the direct connection setup screen.
 
-## Relay
+## Unsupported upstream settings
 
-New homes write `daemon.relay.enabled: false`. Paseo asks before enabling relay when you pair a device; existing homes keep their saved value. See [Connectivity](/docs/connectivity) to choose and configure a connection method, and [Security](/docs/security) for the relay encryption model.
-
-Set the persisted value in `config.json`:
-
-```json
-{
-  "daemon": {
-    "relay": {
-      "enabled": true
-    }
-  }
-}
-```
-
-`PASEO_RELAY_ENABLED=true|false` overrides the file for a foreground deployment. Managed `start` uses the file. End and relaunch a deployment to remove its override before changing relay from the app or `paseo daemon pair --relay`.
+Relay configuration fields and crypto helpers may remain in shared schemas for upstream merging, but relay connections and pairing are disabled in this fork. Do not enable `daemon.relay` or rely on `PASEO_RELAY_*` settings. Use [direct or SSH connections](/docs/connectivity).
 
 ## Common env vars
 
@@ -257,7 +241,6 @@ Set the persisted value in `config.json`:
 - `PASEO_HOST`, set the daemon target for CLI commands
 - `PASEO_PASSWORD`, on the daemon, the password to require (plaintext, hashed at startup); on the CLI, the password used to connect when the host URI doesn't include one
 - `PASEO_LISTEN`, override `daemon.listen`
-- `PASEO_RELAY_ENABLED`, enable or disable the outbound relay for this daemon launch
 - `PASEO_HOSTNAMES`, override/extend `daemon.hostnames`
 - `PASEO_ALLOWED_HOSTS`, deprecated alias for `PASEO_HOSTNAMES`
 - `PASEO_WEB_UI_ENABLED`, enable or disable the daemon-served web UI

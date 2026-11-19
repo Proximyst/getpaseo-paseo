@@ -1,6 +1,5 @@
 import * as React from "react";
 import { type Locale, localizePath } from "~/i18n";
-import type { DesktopPlatform, MobilePlatform } from "~/platform";
 
 export function releaseBase(version: string) {
   return `https://github.com/getpaseo/paseo/releases/download/v${version}`;
@@ -9,22 +8,15 @@ export function releaseBase(version: string) {
 export interface ReleaseAssetInfo {
   version: string;
   linuxAppImageAsset: string;
-  windowsX64Asset: string | null;
-  windowsArm64Asset: string | null;
 }
 
 export function downloadUrls(release: ReleaseAssetInfo) {
-  const { version, linuxAppImageAsset, windowsX64Asset, windowsArm64Asset } = release;
+  const { version, linuxAppImageAsset } = release;
   const base = releaseBase(version);
   return {
-    macAppleSilicon: `${base}/Paseo-${version}-arm64.dmg`,
-    macIntel: `${base}/Paseo-${version}-x64.dmg`,
     linuxAppImage: `${base}/${linuxAppImageAsset}`,
     linuxDeb: `${base}/Paseo-${version}-amd64.deb`,
     linuxRpm: `${base}/Paseo-${version}-x86_64.rpm`,
-    windowsExeX64: `${base}/${windowsX64Asset ?? `Paseo-Setup-${version}.exe`}`,
-    windowsExeArm64: windowsArm64Asset ? `${base}/${windowsArm64Asset}` : null,
-    androidApk: `${base}/paseo-v${version}-android.apk`,
   };
 }
 
@@ -49,9 +41,6 @@ export function thanksPageHref(fileUrl: string, locale: Locale): string {
   return localizePath(`/download/thanks?${new URLSearchParams({ file: fileUrl })}`, locale);
 }
 
-export const appStoreUrl = "https://apps.apple.com/app/paseo-pocket-engineer/id6758887924";
-export const testFlightBetaUrl = "https://testflight.apple.com/join/Y5HpSQjJ";
-export const playStoreUrl = "https://play.google.com/store/apps/details?id=sh.paseo";
 export const webAppUrl = "https://app.paseo.sh";
 
 export interface PrimaryDownload {
@@ -60,30 +49,10 @@ export interface PrimaryDownload {
   icon: (props: React.SVGProps<SVGSVGElement>) => React.ReactElement;
 }
 
-export function getDesktopDownload(
-  release: ReleaseAssetInfo,
-  platform: DesktopPlatform,
-  locale: Locale,
-): PrimaryDownload {
+export function getDesktopDownload(release: ReleaseAssetInfo, locale: Locale): PrimaryDownload {
   const urls = downloadUrls(release);
-  switch (platform) {
-    case "windows":
-      return {
-        label: "Windows",
-        href: thanksPageHref(urls.windowsExeX64, locale),
-        icon: WindowsIcon,
-      };
-    case "linux":
-      return { label: "Linux", href: thanksPageHref(urls.linuxAppImage, locale), icon: LinuxIcon };
-    case "mac":
-      return { label: "Mac", href: thanksPageHref(urls.macAppleSilicon, locale), icon: AppleIcon };
-  }
+  return { label: "Linux", href: thanksPageHref(urls.linuxAppImage, locale), icon: LinuxIcon };
 }
-
-export const MOBILE_STORES: Record<MobilePlatform, PrimaryDownload> = {
-  ios: { label: "iPhone", href: appStoreUrl, icon: AppleIcon },
-  android: { label: "Android", href: playStoreUrl, icon: PlayStoreIcon },
-};
 
 export function AppleIcon(props: React.SVGProps<SVGSVGElement>) {
   return (

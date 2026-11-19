@@ -114,6 +114,9 @@ function fmtMB(bytes) {
 exports.default = async function afterPack(context) {
   const platform = context.electronPlatformName;
   const arch = ARCH_MAP[context.arch] || process.arch;
+  if (process.platform !== "linux" || platform !== "linux") {
+    throw new Error("Paseo desktop packaging is only supported on Linux for Linux.");
+  }
 
   pruneNativeModules(context.appOutDir, platform, arch);
 

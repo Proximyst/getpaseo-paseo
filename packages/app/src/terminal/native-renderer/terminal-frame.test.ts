@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import graphemeRows from "../../../modules/paseo-terminal/android/src/androidTest/assets/grapheme-rows.json";
+import graphemeRows from "../../../modules/paseo-terminal/grapheme-rows.json";
 import { PASEO_TERMINAL_STYLE_FLAGS } from "../../../modules/paseo-terminal/contract";
 import { encodeTerminalFrame } from "../../../modules/paseo-terminal/frame-encoding";
 import {

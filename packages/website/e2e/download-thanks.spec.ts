@@ -1,38 +1,39 @@
 import { expect, test, type Page } from "./fixtures";
 
-const APPLE_SILICON_DMG = /\/getpaseo\/paseo\/releases\/download\/v[^/]+\/Paseo-[^/]+-arm64\.dmg$/;
+const LINUX_APPIMAGE =
+  /\/getpaseo\/paseo\/releases\/download\/v[^/]+\/Paseo-(?:[^/]+-)?x86_64\.AppImage$/;
 
 async function openDownloadPage(page: Page) {
   // Serve a stand-in file so the test never downloads a real release.
-  await page.route(APPLE_SILICON_DMG, (route) =>
+  await page.route(LINUX_APPIMAGE, (route) =>
     route.fulfill({
       status: 200,
       headers: {
         "content-type": "application/octet-stream",
-        "content-disposition": "attachment; filename=Paseo.dmg",
+        "content-disposition": "attachment; filename=Paseo.AppImage",
       },
-      body: "dmg",
+      body: "AppImage",
     }),
   );
   await page.goto("/download");
 }
 
-async function clickAppleSilicon(page: Page) {
-  await page.getByRole("link", { name: "Apple Silicon", exact: true }).click();
+async function clickAppImage(page: Page) {
+  await page.getByRole("link", { name: "AppImage", exact: true }).click();
 }
 
 test("a download button opens the thanks page and requests the file", async ({ page }) => {
   await openDownloadPage(page);
 
-  const fileRequest = page.waitForRequest(APPLE_SILICON_DMG);
-  await clickAppleSilicon(page);
+  const fileRequest = page.waitForRequest(LINUX_APPIMAGE);
+  await clickAppImage(page);
 
   await fileRequest;
   await expect(page).toHaveURL(/\/download\/thanks\?file=/);
   await expect(page.getByRole("heading", { name: "Thanks for downloading Paseo" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Try again" })).toHaveAttribute(
     "href",
-    APPLE_SILICON_DMG,
+    LINUX_APPIMAGE,
   );
 });
 
@@ -41,7 +42,31 @@ test("the thanks page starts a browser download", async ({ page, browserName }) 
   await openDownloadPage(page);
 
   const download = page.waitForEvent("download");
-  await clickAppleSilicon(page);
+  await clickAppImage(page);
 
-  expect((await download).url()).toMatch(APPLE_SILICON_DMG);
+  expect((await download).url()).toMatch(LINUX_APPIMAGE);
+});
+
+test("the download page offers Linux packages without unsupported distributions", async ({
+  page,
+}) => {
+  await openDownloadPage(page);
+  for (const name of ["AppImage", "DEB", "RPM"]) {
+    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+  }
+  await expect(
+    page.locator(
+      'a[href*=".dmg"], a[href*=".exe"], a[href*=".apk"], a[href*="apps.apple.com"], a[href*="play.google.com"], a[href*="testflight.apple.com"]',
+    ),
+  ).toHaveCount(0);
+});
+
+test("the homepage offers Linux rather than mobile store downloads", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Download for Linux", exact: true })).toBeVisible();
+  await expect(
+    page.locator(
+      'a[href*="apps.apple.com"], a[href*="play.google.com"], a[href*="testflight.apple.com"]',
+    ),
+  ).toHaveCount(0);
 });

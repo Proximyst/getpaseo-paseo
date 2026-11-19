@@ -381,7 +381,6 @@ Define an instance once, then start its saved configuration:
 
 ```bash
 paseo daemon config set daemon.listen 127.0.0.1:6799 --home ~/paseo-test
-paseo daemon config set daemon.relay.enabled false --home ~/paseo-test
 paseo daemon start --home ~/paseo-test
 paseo project ls --home ~/paseo-test
 paseo daemon restart --home ~/paseo-test
@@ -392,20 +391,20 @@ paseo daemon stop --home ~/paseo-test
 
 `restart` requests a replacement worker from the existing supervisor. It rereads the file and retains the supervisor's original environment and arguments. Success confirms a different ready worker, following a changed address for a home target. It never starts a stopped daemon or refreshes the supervisor binary. A timeout reports whether the request was acknowledged; it does not prove why reconnection failed.
 
-`stop --home` waits for that local supervisor to exit. On POSIX it signals the supervisor without contacting a TCP endpoint. On Windows it uses the ready daemon's shutdown RPC; an unbound instance requires explicit `--force`. `--force` permits forced process-tree cleanup after the graceful timeout (default 15 seconds). `stop --host` only reports **shutdown requested**; remote process exit is not verified. A service manager may start another instance after the captured supervisor exits.
+`stop --home` waits for that local supervisor to exit. On Linux it signals the supervisor without contacting a TCP endpoint. `--force` permits forced process-tree cleanup after the graceful timeout (default 15 seconds). `stop --host` only reports **shutdown requested**; remote process exit is not verified. A service manager may start another instance after the captured supervisor exits.
 
 `status` separates local supervisor state, its published endpoint, the configured address, and RPC reachability. A stopped home is never probed at its configured address. An unbound live supervisor is **not ready**. If an authenticated local connection remains open but status details time out, the result stays `reachable` with a note explaining the unavailable details. Worker and provider fields are omitted. An explicit `--host` query still fails when its status request fails.
 
 `reload` validates the file, applies runtime-safe changes, and reports `appliedPaths`, `restartRequiredPaths`, and `overrideControlledPaths`. It never implicitly restarts. Use `--json` or `--format yaml` for structured results. An older host lacking the capability reports that it needs an update.
 
-The root aliases `start`, `status`, `restart`, `reload`, and `pair` use the same commands as `daemon`. Root `run` and `stop` remain agent operations.
+The root aliases `start`, `status`, `restart`, and `reload` use the same commands as `daemon`. Root `run` and `stop` remain agent operations.
 
 ### Foreground deployments and migration
 
 Use environment overrides with the foreground deployment command:
 
 ```bash
-PASEO_LISTEN=127.0.0.1:6799 PASEO_RELAY_ENABLED=false paseo daemon run --home ~/paseo-test
+PASEO_LISTEN=127.0.0.1:6799 paseo daemon run --home ~/paseo-test
 ```
 
 It stays attached until the supervisor exits or you cancel, without a readiness timeout. Worker restart retains these launch inputs. Stop and relaunch the deployment to change them. If the home already has a live supervisor, `run` returns `already_running` without owning or launching a foreground process.
@@ -425,7 +424,7 @@ Every daemon-connected CLI command accepts global `--home` or `--host`, before o
 | Both environment selectors, without a flag | `TARGET_AMBIGUOUS`                                     |
 | Neither                                    | Default local home, `~/.paseo`                         |
 
-Local-only `start`, `daemon run`, `config`, `onboard`, and `set-password` reject explicit `--host` and ignore `PASEO_HOST`. Endpoint operations retain TCP, Unix socket, Windows pipe, SSH, and pairing-offer transports. A host-side CLI controlling a container needs `--host` or `PASEO_HOST`.
+Local-only `start`, `daemon run`, `config`, `onboard`, and `set-password` reject explicit `--host` and ignore `PASEO_HOST`. Supported endpoint transports are TCP, Unix sockets, and SSH. Windows pipes and relay pairing offers are not supported in this fork.
 
 ## Hub
 
@@ -465,24 +464,17 @@ See [Daemons in Hub](/docs/hub/daemons), [Hub configuration](/docs/hub/configura
 
 ## Connecting to a remote daemon
 
-The global `--host` option accepts either a local target (`host:port`, a unix socket, or a Windows pipe) or a pairing offer URL, the same `https://app.paseo.sh/#offer=...` link the mobile app uses for QR pairing. With an offer URL the CLI connects through the Paseo relay with end-to-end encryption, so you can drive a daemon on another machine without exposing it to the network.
-
-Get an offer URL from the daemon you want to control:
+The global `--host` option accepts a direct target (`host:port` or a Unix socket) or an SSH URI:
 
 ```bash
-paseo daemon pair          # prints the QR and link when relay is enabled
-paseo daemon pair --relay  # enables relay without prompting
-paseo daemon pair --json   # structured output; never prompts
+paseo --host workstation.local:6767 ls
+paseo --host ssh://user@host ls
+paseo --host 'ssh://user@host:2222?daemonPort=7777' run --cwd /workspace "fix the failing tests"
 ```
 
-Relay is off for new installations. A disabled relay returns a `RELAY_DISABLED` error; pass `--relay` to provide explicit consent. For a stopped home, pairing is labelled offline; `--relay` saves relay enablement and the offer includes a start instruction. A live but unreachable home never falls back to an offline identity. Relay pairing is end-to-end encrypted. See [Security](/docs/security).
+Start the remote Linux daemon first; SSH transport neither installs nor starts it. It uses your local OpenSSH client and non-interactive key/agent authentication. See [Connectivity](/docs/connectivity#ssh).
 
-Use it from anywhere:
-
-```bash
-paseo --host 'https://app.paseo.sh/#offer=eyJ2IjoyLC...' ls
-paseo --host "$OFFER_URL" run "fix the failing tests"
-```
+For direct access beyond localhost, use a trusted LAN/VPN or TLS proxy and set a daemon password. Relay pairing commands and pairing-offer URLs are unavailable.
 
 You can also set it once via `PASEO_HOST` instead of passing `--host` on every command. An explicit flag overrides the environment variable.
 
@@ -528,7 +520,7 @@ paseo ls -q                    # IDs only (quiet)
 
 ## Global options
 
-- `--host <target>`, connect to a different daemon (`host:port`, unix socket, or `https://app.paseo.sh/#offer=...` for relay). See [Connecting to a remote daemon](#connecting-to-a-remote-daemon).
+- `--host <target>`, connect to a different daemon (`host:port`, Unix socket, or `ssh://user@host`). See [Connecting to a remote daemon](#connecting-to-a-remote-daemon).
 - `--json`, JSON output
 - `-q, --quiet`, minimal output
 - `--no-color`, disable colors

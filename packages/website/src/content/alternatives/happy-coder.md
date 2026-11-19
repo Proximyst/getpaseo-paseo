@@ -1,11 +1,13 @@
 ---
-title: Happy Coder Alternative With Worktrees and Multi-Provider Support
-description: Paseo adds managed worktrees, native clients across desktop and mobile, and extensible daemon and client surfaces to a remote coding-agent workflow.
+title: Upstream Paseo vs Happy Coder
+description: Upstream feature comparison; this fork supports Linux desktop, browser, and CLI with direct, SSH, and local-socket connections only.
 nav: Happy Coder
 order: 53
 ---
 
 # Paseo vs Happy Coder
+
+> **Upstream comparison:** The content below is retained to describe upstream Paseo, not this fork's distribution. This fork ships Linux desktop, browser, and CLI clients only, with direct, SSH, or local-socket connections. Native mobile apps, app stores, macOS, Windows, Docker, and relay networking are not supported.
 
 Happy Coder connects Claude Code and Codex sessions across its macOS, web, iOS, and Android apps. It wraps the agent CLI on your laptop and syncs sessions over an end-to-end encrypted relay. Open source under MIT.
 

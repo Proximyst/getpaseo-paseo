@@ -1,6 +1,6 @@
 ---
 title: Security
-description: "Security model for Paseo: architecture overview, connection methods, relay encryption, and best practices."
+description: "Security model for Linux desktop, browser, and CLI connections: direct access, SSH, passwords, and host allowlists."
 nav: Security
 order: 5
 category: Getting started
@@ -8,59 +8,25 @@ category: Getting started
 
 # Security
 
-Paseo follows a client-server architecture, similar to Docker. The daemon runs on your machine and manages your coding agents. Clients (the mobile app, CLI, or web interface) connect to the daemon to monitor and control those agents.
+Paseo follows a client-server architecture. The daemon runs on your Linux machine and manages your coding agents. Linux desktop, CLI, and browser clients connect to the daemon to monitor and control those agents.
 
 Your code never leaves your machine. Paseo is a local-first tool that connects directly to your development environment.
 
 ## Architecture
 
-The Paseo daemon can run anywhere you want to execute agents: your laptop, a Mac Mini, a VPS, or a Docker container. The daemon listens for connections and manages agent lifecycles.
+The Paseo daemon runs on a Linux workstation or server. It listens for connections and manages agent lifecycles.
 
-Clients connect to the daemon over WebSocket. There are two ways to establish this connection:
+Clients connect directly over WebSocket, optionally secured by a VPN or TLS reverse proxy. Linux desktop and CLI also support SSH tunnels to an already-running daemon. Browser users can use SSH port forwarding or the daemon's bundled web UI.
 
-- **Relay connection (recommended)**, The daemon connects outbound to our relay server, and clients meet it there. No open ports required.
-- **Direct connection**, The daemon listens on a network address and clients connect directly.
-
-## Relay connections (recommended)
-
-The relay is the simplest way to connect from your phone. It requires no VPN setup, no port forwarding, and no firewall configuration. The daemon can stay bound to localhost or a socket file, it connects _outbound_ to the relay, and your phone meets it there. The official relay server is the open-source Elixir service at [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay).
-
-Relay is off on new installations. When you pair a device from `paseo`, `paseo daemon pair`, or Paseo Desktop, Paseo asks before enabling it. Choosing not to enable relay leaves the daemon available for direct TCP, Tailscale, or other VPN connections and does not create a pairing QR code. Use `--relay` with the CLI pairing or startup command to opt in without an interactive prompt.
-
-> **The relay is designed to be untrusted.** All traffic between your phone and daemon is end-to-end encrypted. The relay server cannot read your messages, see your code, or modify traffic without detection. Even if the relay is compromised, your data remains protected.
-
-### How it works
-
-1. The daemon generates a persistent ECDH keypair and stores it in `$PASEO_HOME/daemon-keypair.json`
-2. When you scan the QR code or click the pairing link, your phone receives the daemon's public key
-3. Your phone sends a handshake message with its own public key. The daemon will not accept any commands until this handshake completes.
-4. Each side combines its Curve25519 key with the peer public key, then uses the resulting NaCl
-   `box` channel for XSalsa20-Poly1305 protected payloads.
-
-The relay sees only: IP addresses, timing, message sizes, and session IDs. It cannot read message contents, forge messages, or derive encryption keys from observing the handshake.
-
-### Why the relay can't attack you
-
-The daemon requires a valid cryptographic handshake before processing any commands. A compromised relay cannot:
-
-- **Send commands**, Without your phone's private key, it cannot complete the handshake
-- **Read your traffic**, Only the paired endpoints can open the NaCl `box` payloads
-- **Forge messages**, The authenticated cipher rejects modified payloads
-- **Replay old messages**, Each session derives fresh encryption keys
-
-### Trust model
-
-The QR code or pairing link is the trust anchor. It contains the daemon's public key, which is required to establish the encrypted connection. Treat it like a password, don't share it publicly.
+Relay connections, relay pairing, native mobile apps, and Docker deployment are unsupported. Shared upstream encryption/protocol code remains for dependency and merge compatibility, not as an enabled connection path. See [Connectivity](/docs/connectivity).
 
 ## Direct connections
 
-By default, the daemon listens on `127.0.0.1:6767` (localhost only). This is safe for local CLI usage but not reachable from your phone or other devices.
+By default, the daemon listens on `127.0.0.1:6767` (localhost only). It is not reachable from other machines without forwarding or a different listen address. See [Connectivity](/docs/connectivity) for direct, SSH, and Tailscale setup.
 
-For relay and Tailscale setup instructions, see [Connectivity](/docs/connectivity).
+### Socket file
 
-### Socket file (CLI only)
-
-For maximum isolation, you can configure the daemon to listen on a Unix socket file instead of a TCP port. This prevents any network access entirely, only processes on the same machine can connect. The CLI supports this mode, but the mobile app and web interface require a network connection.
+For local isolation, configure the daemon to listen on a Unix socket instead of a TCP port. The CLI and desktop can use local sockets; browser clients require HTTP/WebSocket access. A socket still grants access to every local process permitted to open it.
 
 ### VPN access
 
@@ -86,7 +52,7 @@ Configure via `daemon.hostnames` in `config.json`:
 
 By default, anyone who can reach the daemon's listening address can connect. On localhost this is fine, only local processes have access. But if you bind to a network interface (e.g. your LAN IP or `0.0.0.0`), or if you don't fully trust your local network, you can require a password.
 
-When a password is configured, all HTTP requests must include an `Authorization: Bearer <password>` header, and every WebSocket client, including relay clients, must send the password when it connects. Relay clients send it inside the end-to-end encrypted channel, so the relay never sees it. Unauthenticated HTTP requests receive a `401 Unauthorized` response. Only the `/api/health` liveness endpoint is exempt, so that process supervisors and load balancers can probe without credentials.
+When a password is configured, HTTP API requests require an `Authorization: Bearer <password>` header, and every WebSocket client must authenticate when it connects. Unauthenticated requests receive a `401 Unauthorized` response. Health and protocol-specific capability endpoints have their own admission rules; consult the repository's `SECURITY.md` for the full trust boundary.
 
 If you enable the [bundled web UI](/docs/web-ui), its static files are also served without the password so the login screen can render. This is by design, the API and WebSocket still require authentication before any agent data is returned or any command runs. Set a password before binding the daemon to a network so the data behind the page stays protected.
 
@@ -95,31 +61,13 @@ The password is stored as a bcrypt hash in `config.json`, the daemon never store
 ### What password auth does and does not do
 
 - **Does:** Prevents unauthorized clients from controlling your agents, even if they can reach the daemon over the network.
-- **Does not:** Encrypt traffic. Password auth protects access, not confidentiality. If you need encrypted connections over an untrusted network, use the relay (which provides end-to-end encryption) or a VPN like Tailscale.
+- **Does not:** Encrypt traffic. Use SSH, a VPN such as Tailscale, or HTTPS/WSS through a TLS reverse proxy on untrusted networks.
 
 ### When to use it
 
 - You want to bind the daemon to a LAN or Tailscale address and restrict who can connect.
 - You don't fully trust your local network (shared office, public Wi-Fi with a VPN, etc.).
 - You're exposing the daemon via a reverse proxy and want an additional authentication layer.
-
-We still recommend the relay for mobile access, it combines authentication with end-to-end encryption out of the box. Password auth is primarily useful for direct LAN or VPN connections where you want access control without the relay.
-
-## Docker self-hosting
-
-The official Docker image runs the daemon and bundled web UI in one container. It binds to `0.0.0.0:6767` inside the container so Docker port publishing and reverse proxies work normally.
-
-For Docker deployments:
-
-- Set `PASEO_PASSWORD` before publishing the port to a LAN, VPN, or public address.
-- Use HTTPS at your reverse proxy for browser access outside localhost.
-- Set `PASEO_HOSTNAMES` for any DNS names you use to reach the container.
-- Keep `/workspace` mounts scoped to repositories the agents should be able to read and write.
-- Treat `/home/paseo` as sensitive, it can contain daemon state and provider credentials.
-
-The image runs the daemon and launched agents as the non-root `paseo` user, but container user isolation is not a substitute for careful mounts. Agents can still access whatever code and credentials you mount into the container.
-
-See [Docker](/docs/docker) for Compose and reverse proxy examples.
 
 ## Linux desktop sandbox
 
@@ -151,10 +99,8 @@ Hub CLI credentials are bearer secrets. Remote Hub origins must use HTTPS; clear
 
 ## Recommendations
 
-- **Use the relay** for mobile access, it's the simplest option and all traffic is end-to-end encrypted
-- **Treat the QR code like a password**, anyone with the pairing offer can connect to your daemon unless you also set a password
+- **Use SSH, a VPN, or TLS** for remote connections across untrusted networks
 - **Set a password** if you bind to a network address, it prevents unauthorized clients from controlling your agents
 - **Never bind to 0.0.0.0 without a password**, without one, any device on your network can connect
-- **Scope Docker mounts tightly**, agents can access mounted workspaces and provider credentials
 - **Keep your daemon updated**, security improvements are released regularly
 - **Protect the Hub configuration branch**, push access to the `.paseo` bundle controls what that project can reach, see [How Hub works](/docs/hub/concepts)

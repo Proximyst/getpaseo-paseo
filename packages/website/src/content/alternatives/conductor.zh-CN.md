@@ -1,11 +1,13 @@
 ---
-title: 开源的 Conductor 替代品，支持 Linux、Windows 和移动端
-description: Paseo 是一个开源的 Conductor 替代品，支持 Linux、Windows、原生移动应用、自托管的 daemon 以及可扩展的客户端。
+title: 上游 Paseo 与 Conductor 对比
+description: 上游项目的功能对比；此分支仅支持 Linux 桌面、浏览器和 CLI，以及直连、SSH 和本地套接字。
 nav: Conductor
 order: 50
 ---
 
 # Paseo 与 Conductor 对比
+
+> **上游对比：** 以下内容保留用于介绍上游 Paseo，而非此分支的发行内容。此分支仅提供 Linux 桌面、浏览器和 CLI 客户端，支持直连、SSH 和本地套接字。不支持原生移动应用、应用商店、macOS、Windows、Docker 或中继网络。
 
 Conductor 是一款专有的 macOS 应用，用于在并行的 Git worktree 和托管的云端工作区中运行 Claude Code、Codex、Cursor 和 OpenCode。
 

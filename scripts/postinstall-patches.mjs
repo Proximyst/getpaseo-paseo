@@ -103,7 +103,7 @@ if (!existsSync("patches") || installedPackages.length === 0) {
 
 const patchFiles = readdirSync("patches").filter((file) => file.endsWith(".patch"));
 
-const isWindows = process.platform === "win32";
+const isWindows = false;
 const cmd = isWindows ? "patch-package.cmd" : "patch-package";
 
 let failed = false;

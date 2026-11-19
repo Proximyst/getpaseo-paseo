@@ -1,11 +1,13 @@
 ---
-title: 支持 worktree 和多 Provider 的 Happy Coder 替代品
-description: Paseo 为远程编码 Agent 工作流加入了托管的 worktree、覆盖桌面端和移动端的原生客户端，以及可扩展的 daemon 和客户端界面。
+title: 上游 Paseo 与 Happy Coder 对比
+description: 上游项目的功能对比；此分支仅支持 Linux 桌面、浏览器和 CLI，以及直连、SSH 和本地套接字。
 nav: Happy Coder
 order: 53
 ---
 
 # Paseo 与 Happy Coder 对比
+
+> **上游对比：** 以下内容保留用于介绍上游 Paseo，而非此分支的发行内容。此分支仅提供 Linux 桌面、浏览器和 CLI 客户端，支持直连、SSH 和本地套接字。不支持原生移动应用、应用商店、macOS、Windows、Docker 或中继网络。
 
 Happy Coder 在其 macOS、Web、iOS 和 Android 应用之间连接 Claude Code 和 Codex 会话。它在你的笔记本上包装 Agent CLI，并通过端到端加密的中继同步会话。它以 MIT 许可开源。
 

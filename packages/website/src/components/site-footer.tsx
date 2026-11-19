@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { PLUGINS_LINKED } from "~/plugins/launch";
 import { getAlternativePages } from "~/data/alternative-pages";
-import { appStoreUrl, playStoreUrl, webAppUrl } from "~/downloads";
+import { webAppUrl } from "~/downloads";
 import { SponsorsSection } from "~/components/sponsorship";
 import { useLocale, useLocalizePath } from "~/i18n";
 
@@ -88,11 +88,7 @@ export function SiteFooter({ width = "default", sponsors = true }: SiteFooterPro
         <div className="space-y-3">
           <p className="text-extra-muted-foreground">{t("footer.download")}</p>
           <div className="space-y-2">
-            <ExternalLink href={appStoreUrl}>App Store</ExternalLink>
-            <ExternalLink href={playStoreUrl}>Google Play</ExternalLink>
-            <ExternalLink href="https://github.com/getpaseo/paseo/releases">
-              {t("footer.desktop")}
-            </ExternalLink>
+            {page("/download", t("footer.desktop"))}
             <ExternalLink href={webAppUrl}>{t("footer.webApp")}</ExternalLink>
           </div>
         </div>

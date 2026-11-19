@@ -14,7 +14,7 @@ Paseo is a full agentic development environment. Run coding agents, edit files, 
 
 Open the desktop app, choose a project and an agent, and start working. Keep the conversation, editor, terminal, diffs, and browser together in split panes. Run your app, inspect the result, and ask the agent for changes without leaving the workspace.
 
-The desktop app is available on macOS, Windows, and Linux. It starts and manages its local daemon automatically.
+This fork's desktop app is available on Linux. It starts and manages its local daemon automatically.
 
 ## Run tasks in parallel
 
@@ -30,9 +30,9 @@ Dictate tasks or use [voice mode](/docs/voice). Speech-to-text and text-to-speec
 
 ## Continue from another device
 
-The daemon owns the running agents and workspaces. The desktop app connects to it locally; mobile, web, and CLI clients connect to the same environment. That separation lets you continue working from another device or run your environment on a server.
+The daemon owns the running agents and workspaces. Linux desktop, browser/web UI, and CLI clients connect to the same environment, locally or on another Linux host. The built-in browser runs in the desktop app.
 
-Use Paseo entirely on your laptop, or connect to another machine when you need it. The native iOS and Android app gives you agents, files, terminals, and diffs on your phone. The built-in browser runs in the desktop app. [Connect your devices](/docs/connectivity) directly or through the optional end-to-end encrypted relay.
+[Connect your clients](/docs/connectivity) directly over a trusted network, with a VPN, or through SSH from desktop and CLI. Native mobile apps and relay connections are not supported in this fork.
 
 ## Automate and extend your workflow
 

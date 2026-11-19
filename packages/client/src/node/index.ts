@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import type { Agent } from "node:http";
 import { WebSocket } from "ws";
 import { parseHostTarget, type HostTarget } from "@getpaseo/protocol/host-target";
+import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import { createSshTunnel, type SshTunnel } from "./ssh-tunnel.js";
 import { createWebSocketTransportFactory } from "../daemon-client-websocket-transport.js";
 import { createRelayE2eeTransportFactory } from "../daemon-client-relay-e2ee-transport.js";
@@ -31,6 +32,9 @@ export function createHostTransportFactory(
   options: HostTransportOptions = {},
 ): DaemonTransportFactory {
   const target = parseHostTarget(connection);
+  if (target.kind === "socket" && (target.offer || isRelayClientWebSocketUrl(target.url))) {
+    throw new Error("Relay connections are not supported. Use a direct or SSH connection.");
+  }
   // Rises to "protected" once the daemon negotiates it, so a later attempt
   // cannot be downgraded to legacy endpoint security.
   let securityFloor: SecurityMode | undefined =
@@ -208,6 +212,9 @@ export function createHostClient(
   budget?: HostTransportBudget,
 ): DaemonClient {
   const target = parseHostTarget(connection);
+  if (target.kind === "socket" && (target.offer || isRelayClientWebSocketUrl(target.url))) {
+    throw new Error("Relay connections are not supported. Use a direct or SSH connection.");
+  }
   const { webSocketAgent, transportFactory, ...clientConfig } = config;
   return new DaemonClient({
     ...clientConfig,

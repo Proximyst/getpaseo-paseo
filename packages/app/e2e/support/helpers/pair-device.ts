@@ -24,7 +24,7 @@ export async function prepareLocalPairingHost(
 ): Promise<void> {
   await page.addInitScript((localServerId) => {
     (window as unknown as { paseoDesktop: unknown }).paseoDesktop = {
-      platform: "darwin",
+      platform: "linux",
       invoke: async (command: string) => {
         if (command === "desktop_daemon_status") {
           return {

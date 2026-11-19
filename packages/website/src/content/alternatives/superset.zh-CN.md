@@ -1,11 +1,13 @@
 ---
-title: 支持原生移动端的开源 Superset 替代品
-description: Paseo 是一个采用 Apache-2.0 许可的 Superset 替代品，无需账号即可在本地运行，并支持覆盖其服务端和客户端的应用插件。
+title: 上游 Paseo 与 Superset 对比
+description: 上游项目的功能对比；此分支仅支持 Linux 桌面、浏览器和 CLI，以及直连、SSH 和本地套接字。
 nav: Superset
 order: 51
 ---
 
 # Paseo 与 Superset 对比
+
+> **上游对比：** 以下内容保留用于介绍上游 Paseo，而非此分支的发行内容。此分支仅提供 Linux 桌面、浏览器和 CLI 客户端，支持直连、SSH 和本地套接字。不支持原生移动应用、应用商店、macOS、Windows、Docker 或中继网络。
 
 Superset 是一个源代码可见的桌面工作区，用于在并行的 Git worktree 中运行 CLI 编码 Agent。它包括 CLI、SDK、MCP 服务器和远程主机。
 

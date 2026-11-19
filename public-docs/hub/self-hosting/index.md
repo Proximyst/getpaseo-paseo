@@ -104,24 +104,9 @@ PASEO_BOOTSTRAP_OWNER_PASSWORD=replace-with-a-temporary-password
 
 The password must be at least 12 characters. Sign in once, replace it in the dashboard, then remove `PASEO_BOOTSTRAP_OWNER_PASSWORD`. Hub keeps the account and organization.
 
-## Docker Compose
+## HTTPS with Caddy
 
-The repository contains Hub and PostgreSQL as one Compose stack:
-
-```sh
-git clone https://github.com/getpaseo/hub.git
-cd hub
-cp .env.example .env
-docker compose up -d
-```
-
-Open <http://localhost:3000> and complete browser setup. For a public deployment, set `PASEO_HUB_APP_URL` and any reverse-proxy settings in `.env` before starting the stack.
-
-The stack publishes Hub on port `3000` and stores PostgreSQL data in a named volume. The Hub image is `ghcr.io/getpaseo/hub:latest`.
-
-### HTTPS with Caddy
-
-Compose serves plain HTTP on port `3000`. Run Caddy on the same host to terminate TLS:
+Run Hub with npm on a Linux host and use Caddy to terminate TLS:
 
 ```caddyfile
 hub.example.com {
@@ -131,38 +116,17 @@ hub.example.com {
 
 Point `hub.example.com` at the host and open ports 80 and 443. Caddy [obtains and renews the certificate](https://caddyserver.com/docs/automatic-https).
 
-Then set in `.env`:
+Set the public origin and trusted proxy header in the Hub service's environment:
 
 ```dotenv
 PASEO_HUB_APP_URL=https://hub.example.com
 PASEO_HUB_TRUSTED_CLIENT_IP_HEADER=x-forwarded-for
 ```
 
-To keep port `3000` off the public interface, change the `hub` port in `compose.yml` to `"127.0.0.1:3000:3000"`.
+Keep Hub's HTTP port private with your host firewall; expose only the reverse proxy.
 
-## Fly
-
-Clone the repository and create an app and database under names you control:
-
-```sh
-git clone https://github.com/getpaseo/hub.git
-cd hub
-fly apps create your-hub
-fly postgres create --name your-hub-db
-fly postgres attach your-hub-db -a your-hub
-```
-
-Deploy the Dockerfile and give Hub its public origin:
-
-```sh
-fly deploy -a your-hub \
-  -e PASEO_HUB_APP_URL=https://your-hub.fly.dev
-```
-
-Open that address and complete browser setup, or set the [bootstrap environment](#bootstrap-from-environment) before deploying.
-
-Keep one machine running. Hub holds Slack Socket Mode and Discord gateway connections and dispatches events to daemons, so a stopped machine misses events.
+Keep the Hub process running under your Linux service manager. Hub holds Slack Socket Mode and Discord gateway connections and dispatches events to daemons, so a stopped process misses events.
 
 ## Upgrades
 
-Pull the new image or source and deploy it. Migrations are forward-only. Back up the embedded data directory or PostgreSQL database first; it contains accounts, app credentials, configuration revisions, connections, and execution history.
+Update the npm package or source and restart the service. Migrations are forward-only. Back up the embedded data directory or PostgreSQL database first; it contains accounts, app credentials, configuration revisions, connections, and execution history.

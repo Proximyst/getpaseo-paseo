@@ -9,9 +9,9 @@ Paseo is a mobile app for monitoring and controlling your local AI coding agents
 This is an npm workspace monorepo:
 
 - `packages/server` — Daemon: agent lifecycle, WebSocket API, MCP server
-- `packages/app` — Mobile + web client (Expo)
-- `packages/cli` — Docker-style CLI (`paseo run/ls/logs/wait`)
-- `packages/relay` — E2E encrypted relay for remote access
+- `packages/app` — Browser and Linux desktop UI (Expo; shared native code retained)
+- `packages/cli` — CLI (`paseo run/ls/logs/wait`)
+- `packages/relay` — Retained shared encryption code; relay networking and deployment disabled
 - `packages/desktop` — Electron desktop wrapper
 - `packages/website` — Marketing site (paseo.sh)
 
@@ -61,13 +61,10 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/file-observation.md](docs/file-observation.md)                 | Recursive watcher ownership, Linux constraints, teardown invariants, and Parcel comparison                                     |
 | [docs/testing.md](docs/testing.md)                                   | TDD workflow, determinism, real dependencies over mocks, test organization                                                     |
 | [docs/qa.md](docs/qa.md)                                             | QA evidence bar for pull requests — platform matrix, version drift, performance, UI proof                                      |
-| [docs/mobile-testing.md](docs/mobile-testing.md)                     | Maestro and mobile test workflows                                                                                              |
 | [docs/mobile-panels.md](docs/mobile-panels.md)                       | Compact left/center/right panel ownership, worklet motion, gesture revisions, and Fabric constraints                           |
 | [docs/explorer-sidebar.md](docs/explorer-sidebar.md)                 | Explorer sidebar, side-pane, and compact workspace sheet host contracts, lifecycle, placement, routing preferences             |
 | [docs/ad-hoc-daemon-testing.md](docs/ad-hoc-daemon-testing.md)       | Isolated in-process daemon test harness                                                                                        |
 | [docs/browser-capture-harness.md](docs/browser-capture-harness.md)   | Real-Electron browser screenshot harness and compositor-surface gotcha                                                         |
-| [docs/android.md](docs/android.md)                                   | App variants, local/cloud builds, EAS workflows, version codes, F-Droid source builds and store metadata                       |
-| [docs/docker.md](docs/docker.md)                                     | Running the daemon and bundled web UI in Docker, volumes, agent images, security                                               |
 | [docs/release.md](docs/release.md)                                   | Release playbook, draft releases, completion checklist                                                                         |
 | [docs/terminal-worker.md](docs/terminal-worker.md)                   | Terminal worker process model, socket/record/secret, protocol-bump rule and draining, the worker's file copy, Windows desktop  |
 | [docs/terminal-activity.md](docs/terminal-activity.md)               | Terminal activity indicators — source-agnostic tracker, agent hook reporting, adding a new hook provider                       |
@@ -114,14 +111,14 @@ npm run format:check                 # Check formatting without writing
 
 Repo dev commands use checkout-local state by default. In this checkout, `PASEO_HOME` resolves to `.dev/paseo-home`, and `npm run cli -- ...` targets that same dev home automatically. The packaged desktop app and production-style daemon keep using `~/.paseo` on port `6767`.
 
-When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: writes `artifacts/paseo-dogfood-arm64.apk` with diagnostics without starting a device; `npm run build:apk` builds all four Android architectures.
+This fork ships Linux desktop, browser, and CLI targets. Docker, iOS/Android, stores/F-Droid, relay networking, Windows, macOS, and Nix packaging are unsupported. Keep direct and SSH connections. Preserve shared upstream implementations behind disabled boundaries; do not restore excluded build/release wiring. Use `.agents/skills/merge-upstream/SKILL.md` when syncing upstream.
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
 ## Release branches
 
 Merge normal PRs into `main`, including while a beta soaks or a release is being finalized. Each
-release builds in a short-lived release workspace from `origin/main` or a release tag; see
+release builds in a short-lived release workspace from `fork/main` or a release tag; see
 [release base and source](docs/release.md#release-base-and-source).
 
 ## Critical rules
@@ -154,7 +151,7 @@ release builds in a short-lived release workspace from `origin/main` or a releas
 
 ## Platform gating
 
-The app runs on iOS, Android, web (browser), and web (Electron desktop). Code is cross-platform by default. Gate only when you must. Import gates from `@/constants/platform`.
+The supported app targets are web (browser) and web (Linux Electron desktop). Shared native code remains for upstream merges, not as a supported build target. Gate only when you must. Import gates from `@/constants/platform`.
 
 ### The four gates
 

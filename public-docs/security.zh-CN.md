@@ -102,21 +102,9 @@ Paseo 使用主机白名单校验传入请求的 `Host` 请求头。主机无法
 
 对于移动端访问，我们仍然推荐使用中继，它开箱即用地把身份验证和端到端加密结合在一起。密码验证主要适用于直接的局域网或 VPN 连接，在不使用中继的情况下提供访问控制。
 
-## 用 Docker 自托管 {#docker-self-hosting}
+## 本 fork 的部署范围
 
-官方 Docker 镜像在一个容器中运行 daemon 和内置的 Web UI。它在容器内绑定 `0.0.0.0:6767`，以便 Docker 端口发布和反向代理可以正常工作。
-
-对于 Docker 部署：
-
-- 在把端口发布到局域网、VPN 或公网地址之前，设置 `PASEO_PASSWORD`。
-- 在 localhost 之外通过浏览器访问时，在反向代理上使用 HTTPS。
-- 为你用来访问容器的所有 DNS 名称设置 `PASEO_HOSTNAMES`。
-- 让 `/workspace` 挂载只包含 Agent 应该能读写的仓库。
-- 把 `/home/paseo` 视为敏感目录，它可能包含 daemon 状态和 Provider 凭据。
-
-镜像以非 root 的 `paseo` 用户运行 daemon 和它启动的 Agent，但容器用户隔离不能替代谨慎的挂载。Agent 仍然可以访问你挂载到容器中的任何代码和凭据。
-
-Compose 和反向代理的示例见 [Docker](/docs/docker)。
+本 fork 不提供 Docker 部署或中继连接。Linux daemon 的网页界面、反向代理和 SSH 设置见当前[英文安全指南](/docs/security)和[连接指南](/docs/connectivity)；本页其余未同步译文仅保留上游背景。
 
 ## Linux 桌面沙盒 {#linux-desktop-sandbox}
 

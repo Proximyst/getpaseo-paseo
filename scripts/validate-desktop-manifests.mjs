@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "js-yaml";
-import { MACOS_MINIMUM_DARWIN_VERSION } from "./merge-mac-manifest.mjs";
 
 export function validateDesktopManifests({ releaseDate, rolloutHours }, paths) {
   if (!Number.isFinite(rolloutHours) || rolloutHours < 0) {
@@ -23,14 +22,6 @@ export function validateDesktopManifests({ releaseDate, rolloutHours }, paths) {
     }
     if (typeof manifest.version !== "string" || manifest.version.length === 0) {
       throw new Error(`${manifestPath}: missing or invalid version`);
-    }
-    if (
-      manifestPath.endsWith("-mac.yml") &&
-      manifest.minimumSystemVersion !== MACOS_MINIMUM_DARWIN_VERSION
-    ) {
-      throw new Error(
-        `${manifestPath}: minimumSystemVersion=${manifest.minimumSystemVersion}, expected ${MACOS_MINIMUM_DARWIN_VERSION}`,
-      );
     }
   }
 }

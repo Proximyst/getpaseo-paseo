@@ -171,51 +171,9 @@ Paseo 由一个人开发，靠使用它的人来资助。你可以通过 [GitHub
 - [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) — 官方分布式 relay，使用 Elixir 编写
 - [paseo-vscode](https://marketplace.visualstudio.com/items?itemName=hinnes.paseo-vscode) — VS Code 扩展
 
-### 自托管 relay TLS
+### 本 fork 的连接方式
 
-自托管 relay 默认使用 `ws://`，除非显式启用 TLS。对于 nginx 后面、监听 443 的 relay，可以这样启动 daemon：
-
-```bash
-PASEO_RELAY_ENDPOINT=127.0.0.1:8080 \
-PASEO_RELAY_PUBLIC_ENDPOINT=relay.example.com:443 \
-PASEO_RELAY_USE_TLS=true \
-paseo daemon start
-```
-
-等价配置：
-
-```json
-{
-  "daemon": {
-    "relay": {
-      "enabled": true,
-      "endpoint": "127.0.0.1:8080",
-      "publicEndpoint": "relay.example.com:443",
-      "useTls": true
-    }
-  }
-}
-```
-
-最小 nginx WebSocket 代理配置：
-
-```nginx
-server {
-  listen 443 ssl;
-  server_name relay.example.com;
-
-  ssl_certificate /etc/letsencrypt/live/relay.example.com/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/relay.example.com/privkey.pem;
-
-  location /ws {
-    proxy_pass http://127.0.0.1:8080;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-  }
-}
-```
+本 fork 仅支持 Linux 桌面、浏览器和 CLI，使用直接连接或 SSH，不支持部署或启用 relay。当前设置以[英文 README](README.md)为准；本页其余译文保留上游背景。
 
 ## License
 

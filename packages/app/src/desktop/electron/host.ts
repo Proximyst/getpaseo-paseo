@@ -5,7 +5,7 @@ export function getElectronHost(): DesktopHostBridge | null {
     return null;
   }
   const host = window.paseoDesktop;
-  if (!host || typeof host !== "object") {
+  if (!host || typeof host !== "object" || host.platform !== "linux") {
     return null;
   }
   return host;

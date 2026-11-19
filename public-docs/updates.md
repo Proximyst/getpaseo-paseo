@@ -8,7 +8,7 @@ category: Getting started
 
 # Updates
 
-Paseo ships updates through two channels: **Stable** and **Beta**.
+This fork ships Linux desktop and npm updates through two channels: **Stable** and **Beta**. Native mobile apps, app stores, and other desktop operating systems are not release targets.
 
 Most releases go out on the stable channel. Betas are release candidates that let you test what's coming next before it rolls out to everyone.
 
@@ -52,20 +52,12 @@ Betas are the best way to get fixes and features early. If you hit a bug, report
 
 ### How to join the beta channel
 
-| Platform       | How to get betas                                                                                              |
-| -------------- | ------------------------------------------------------------------------------------------------------------- |
-| iOS and iPadOS | Join the [Paseo TestFlight beta](https://testflight.apple.com/join/Y5HpSQjJ).                                 |
-| Android        | Download the APK from a prerelease on the [GitHub releases page](https://github.com/getpaseo/paseo/releases). |
-| Desktop        | Open **Settings → About** and select **Beta** under **Release channel**.                                      |
-| CLI            | Run `npm install -g @getpaseo/cli@beta`. Plain `npm install -g @getpaseo/cli` stays on stable.                |
+| Platform      | How to get betas                                                                               |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| Linux desktop | Open **Settings → About** and select **Beta** under **Release channel**.                       |
+| CLI           | Run `npm install -g @getpaseo/cli@beta`. Plain `npm install -g @getpaseo/cli` stays on stable. |
 
 The desktop app checks for beta updates from the moment you select **Beta**.
-
-## App stores
-
-Desktop releases and the CLI are usually available first. App Store and Play Store releases can lag behind because they go through review.
-
-The App Store and Play Store listings carry stable builds only. On iOS, the [TestFlight beta](https://testflight.apple.com/join/Y5HpSQjJ) is the beta channel. Every beta is uploaded to it after Apple's beta review, and stable releases are uploaded to it as well, so TestFlight testers stay on the latest build. On Android there is no Play Store beta, so install beta APKs from GitHub.
 
 ## What to do if something breaks
 

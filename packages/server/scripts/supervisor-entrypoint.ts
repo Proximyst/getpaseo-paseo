@@ -16,6 +16,10 @@ import { reapTerminalWorkers } from "../src/terminal/terminal-worker-reaper.js";
 import { runSupervisor } from "./supervisor.js";
 import { resolveSupervisorLogFile } from "./supervisor-log-config.js";
 
+if (process.platform !== "linux") {
+  throw new Error(`Paseo daemon is only supported on Linux (received ${process.platform}).`);
+}
+
 process.title = "Paseo Supervisor";
 
 interface DaemonRunnerConfig {

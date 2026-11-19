@@ -1,11 +1,13 @@
 ---
-title: Orca Alternative for Agentic Development
-description: Paseo is an open source agentic development environment with parallel worktrees, an editor, terminals, diffs, pull requests, and a built-in browser.
+title: Upstream Paseo vs Orca
+description: Upstream feature comparison; this fork supports Linux desktop, browser, and CLI with direct, SSH, and local-socket connections only.
 nav: Orca
 order: 57
 ---
 
 # Paseo vs Orca
+
+> **Upstream comparison:** The content below is retained to describe upstream Paseo, not this fork's distribution. This fork ships Linux desktop, browser, and CLI clients only, with direct, SSH, or local-socket connections. Native mobile apps, app stores, macOS, Windows, Docker, and relay networking are not supported.
 
 Orca is an MIT-licensed desktop app for running terminal coding agents in parallel Git worktrees. It includes a mobile companion app, SSH worktrees, remote Orca servers, an embedded browser, and a CLI.
 

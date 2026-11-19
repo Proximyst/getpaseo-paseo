@@ -1,11 +1,13 @@
 ---
-title: 支持原生移动端和多 Provider 编排的 OpenCode Desktop 替代品
-description: Paseo 是一个 OpenCode Desktop 替代品，适合需要原生移动应用、自托管 daemon，并希望把 OpenCode 与 Claude Code、Codex、Copilot 等一起使用的开发者。
+title: 上游 Paseo 与 OpenCode Desktop 对比
+description: 上游项目的功能对比；此分支仅支持 Linux 桌面、浏览器和 CLI，以及直连、SSH 和本地套接字。
 nav: OpenCode Desktop
 order: 56
 ---
 
 # Paseo 与 OpenCode Desktop 对比
+
+> **上游对比：** 以下内容保留用于介绍上游 Paseo，而非此分支的发行内容。此分支仅提供 Linux 桌面、浏览器和 CLI 客户端，支持直连、SSH 和本地套接字。不支持原生移动应用、应用商店、macOS、Windows、Docker 或中继网络。
 
 OpenCode Desktop 是 OpenCode 的桌面应用。它目前以 beta 版本提供，支持 macOS、Windows 和 Linux。
 

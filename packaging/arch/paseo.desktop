@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Paseo
+Comment=Local AI coding agents with desktop, browser, CLI, and SSH access
+Exec=paseo-desktop %U
+TryExec=paseo-desktop
+Icon=paseo
+Terminal=false
+Categories=Development;
+StartupWMClass=Paseo
+MimeType=x-scheme-handler/paseo;

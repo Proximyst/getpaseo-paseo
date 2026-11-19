@@ -41,26 +41,25 @@ The two things that go wrong most often:
 
 Paseo is composable by design, which means your change sits next to features you didn't touch. Open the surfaces around it. A change to the agent list affects archive, subagents, and tabs; a change to git actions affects worktrees and the checkout flow.
 
-Performance is part of this. The app is Expo React Native, not a web app in a native shell. You are not writing CSS, styles resolve differently, and performance characteristics differ per platform. What feels instant in a desktop dev build can be visibly slow on a phone.
+Performance is part of this. The shared app source uses Expo React Native, rendered on the web and inside Linux Electron. Check browser and desktop behavior independently; retained native branches are upstream merge context, not supported app targets.
 
 If your change touches a hot path such as the terminal, the message list, or git polling, submit before and after numbers. [terminal-performance.md](terminal-performance.md) has the terminal pipeline and its benchmarks, and [development.md](development.md) covers renderer and React profiling.
 
 ## Every platform it affects
 
-Your code does not only run on the platform you tested it on. The same app ships to iOS, Android, browser web, and Electron on macOS, Windows, and Linux, and the daemon runs on all three desktop operating systems plus Docker.
+This fork supports Linux desktop, browser/web UI, and CLI on Linux. Shared native and platform-specific code does not add other release targets. Direct connections and SSH are supported; relay is disabled. See the [architecture scope](architecture.md).
 
-You aren't expected to own every device. You are expected to say what you covered:
+Say which supported surfaces and transports you covered:
 
-| Platform        | Tested | Notes |
-| --------------- | ------ | ----- |
-| iOS             |        |       |
-| Android         |        |       |
-| Web             |        |       |
-| Desktop macOS   |        |       |
-| Desktop Windows |        |       |
-| Desktop Linux   |        |       |
+| Surface / transport | Tested | Notes |
+| ------------------- | ------ | ----- |
+| Linux desktop       |        |       |
+| Browser web UI      |        |       |
+| Linux daemon / CLI  |        |       |
+| Direct connection   |        |       |
+| SSH connection      |        |       |
 
-Install what you reasonably can. An iOS simulator and an Android emulator cover most of the gap on a single machine, see [development.md](development.md) and [android.md](android.md).
+Use [development.md](development.md) for local setup. Do not install mobile simulators or re-enable excluded release targets as part of fork QA.
 
 For the rules about which code runs where, read the platform gating section in [CLAUDE.md](../CLAUDE.md). The recurring traps have their own docs: [hover.md](hover.md), [unistyles.md](unistyles.md), [floating-panels.md](floating-panels.md), [mobile-panels.md](mobile-panels.md), [expo-router.md](expo-router.md).
 
@@ -77,4 +76,4 @@ Tests are evidence only when they exercise the real thing.
 
 Tests that mock away the behavior, assert on internals, or pass against the broken code claim coverage that isn't there.
 
-[testing.md](testing.md) is the standard, including how to run suites without freezing your machine. For driving a real daemon in a test, see [ad-hoc-daemon-testing.md](ad-hoc-daemon-testing.md). For mobile flows, [mobile-testing.md](mobile-testing.md). For Electron screenshots, [browser-capture-harness.md](browser-capture-harness.md).
+[testing.md](testing.md) is the standard, including how to run suites without freezing your machine. For driving a real daemon in a test, see [ad-hoc-daemon-testing.md](ad-hoc-daemon-testing.md). For Electron screenshots, see [browser-capture-harness.md](browser-capture-harness.md).

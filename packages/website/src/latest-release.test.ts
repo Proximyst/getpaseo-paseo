@@ -34,12 +34,7 @@ function desktopRelease({
 }): GitHubRelease {
   return {
     tag_name: `v${version}`,
-    assets: [
-      { name: `Paseo-${version}-arm64.dmg` },
-      { name: "Paseo-x86_64.AppImage" },
-      { name: `Paseo-Setup-${version}-x64.exe` },
-      { name: `Paseo-Setup-${version}-arm64.exe` },
-    ],
+    assets: [{ name: "Paseo-x86_64.AppImage" }],
     prerelease,
     draft,
   };
@@ -67,7 +62,6 @@ describe("selectReleaseChannels", () => {
 
     expect(channels.stable.version).toBe("0.2.5");
     expect(channels.beta?.version).toBe("0.3.0-beta.2");
-    expect(channels.beta?.windowsArm64Asset).toBe("Paseo-Setup-0.3.0-beta.2-arm64.exe");
   });
 
   it("retires the beta channel once stable ships the same version", () => {

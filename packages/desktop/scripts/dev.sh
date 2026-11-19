@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "Paseo desktop development is only supported on Linux." >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ROOT_DIR="$(cd "$DESKTOP_DIR/../.." && pwd)"

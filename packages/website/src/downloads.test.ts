@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseReleaseAssetUrl } from "./downloads";
+import { downloadUrls, getDesktopDownload, parseReleaseAssetUrl } from "./downloads";
 
 describe("parseReleaseAssetUrl", () => {
   it("accepts a Paseo release file", () => {
@@ -32,5 +32,28 @@ describe("parseReleaseAssetUrl", () => {
     ).toBeNull();
     expect(parseReleaseAssetUrl("not a url")).toBeNull();
     expect(parseReleaseAssetUrl(undefined)).toBeNull();
+  });
+});
+
+describe("Linux downloads", () => {
+  const release = { version: "0.16.1", linuxAppImageAsset: "Paseo-x86_64.AppImage" };
+
+  it("offers the shipped Linux packages", () => {
+    expect(downloadUrls(release)).toEqual({
+      linuxAppImage:
+        "https://github.com/getpaseo/paseo/releases/download/v0.16.1/Paseo-x86_64.AppImage",
+      linuxDeb:
+        "https://github.com/getpaseo/paseo/releases/download/v0.16.1/Paseo-0.16.1-amd64.deb",
+      linuxRpm:
+        "https://github.com/getpaseo/paseo/releases/download/v0.16.1/Paseo-0.16.1-x86_64.rpm",
+    });
+  });
+
+  it("routes the primary Linux download through the localized thanks page", () => {
+    const download = getDesktopDownload(release, "zh-CN");
+    const url = new URL(download.href, "https://paseo.sh");
+    expect(download.label).toBe("Linux");
+    expect(url.pathname).toBe("/zh-CN/download/thanks");
+    expect(url.searchParams.get("file")).toBe(downloadUrls(release).linuxAppImage);
   });
 });

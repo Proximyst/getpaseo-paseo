@@ -1,5 +1,7 @@
 # Markdown rendering
 
+This document covers shared source retained from upstream. Linux desktop and browser rendering are supported in this fork; native iOS/Android behavior below is design context only, not a build or release target.
+
 Use `MarkdownRenderer` for chat replies, file previews, plans, pull requests and changelog content. It uses `react-native-enriched-markdown` on iOS, Android and web. Keep source adaptation and renderer configuration in `components/markdown`; consumers supply Markdown and, when needed, its file location.
 
 Native selection belongs to the library's text view. Keep an assistant message in one row so selection can cross paragraphs, headings and lists. Code blocks and tables use the library's native views and their selection behavior. Web uses browser selection over semantic HTML. Once its WASM parser is initialized, the library parses synchronously for the first commit of each mounted row; an empty interim row would corrupt virtualized measurements and move the reader. Chat owns paced reveal, the web render cap, message identity and list measurement. Native renders completed messages together. While streaming, it keeps closed blocks in one head view and updates a separate tail, then reunites the text on completion. See [native parsing cost](agent-stream-performance.md#native-parsing-cost) for the boundary and pacing constraints.
@@ -36,4 +38,4 @@ The library determines how incomplete Markdown appears during streaming. Complet
 
 ## Verification
 
-Follow [QA](qa.md) and [mobile testing](mobile-testing.md). Exercise chat, file preview, plan and PR content on all three platforms. Include cross-paragraph selection, progressive streaming, a file-link tap, code copy/highlighting, a table and a workspace image. On iPad, repeat preview selection after opening and closing Explorer and after rotation. Check web find, selection-copy and source-message navigation after DOM changes.
+Follow [QA](qa.md). Exercise chat, file preview, plan and PR content on Linux desktop and browser. Include cross-paragraph selection, progressive streaming, a file-link click, code copy/highlighting, a table and a workspace image. Check web find, selection-copy and source-message navigation after DOM changes.

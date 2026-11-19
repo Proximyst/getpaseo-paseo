@@ -1,11 +1,13 @@
 ---
-title: 开源的 Claude Desktop 替代品，支持原生移动端和多 Provider
-description: Paseo 是一个开源的 Claude Desktop 替代品，运行在你自己的机器上，不需要 Paseo 账号，没有遥测，也不依赖云服务。
+title: 上游 Paseo 与 Claude Desktop 对比
+description: 上游项目的功能对比；此分支仅支持 Linux 桌面、浏览器和 CLI，以及直连、SSH 和本地套接字。
 nav: Claude Desktop
 order: 55
 ---
 
 # Paseo 与 Claude Desktop 对比
+
+> **上游对比：** 以下内容保留用于介绍上游 Paseo，而非此分支的发行内容。此分支仅提供 Linux 桌面、浏览器和 CLI 客户端，支持直连、SSH 和本地套接字。不支持原生移动应用、应用商店、macOS、Windows、Docker 或中继网络。
 
 Claude Desktop 是 Anthropic 推出的应用，在 macOS、Windows 和 Linux 上提供 Claude Chat、Cowork 和 Claude Code。
 

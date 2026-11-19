@@ -276,7 +276,7 @@ describe("DaemonSession", () => {
     ]);
   });
 
-  test("pairing offer mints a real connection URL when relay is enabled", async () => {
+  test("pairing offer stays empty even when the runtime reports relay enabled", async () => {
     const { subsystem, emitted } = makeSubsystem({
       daemonRuntimeConfig: {
         listen: "127.0.0.1:6767",
@@ -303,12 +303,12 @@ describe("DaemonSession", () => {
       throw new Error("expected a pairing offer response");
     }
     expect(message.payload.requestId).toBe("p-2");
-    expect(message.payload.relayEnabled).toBe(true);
-    expect(message.payload.url.startsWith("https://app.example.test")).toBe(true);
-    expect(typeof message.payload.qr).toBe("string");
+    expect(message.payload.relayEnabled).toBe(false);
+    expect(message.payload.url).toBe("");
+    expect(message.payload.qr).toBeNull();
   });
 
-  test("pairing offer reads relay state at request time", async () => {
+  test("pairing cannot be enabled by a runtime relay state change", async () => {
     let enabled = false;
     const { subsystem, emitted } = makeSubsystem({
       daemonRuntimeConfig: {
@@ -338,8 +338,8 @@ describe("DaemonSession", () => {
       (message) => message.type === "daemon.get_pairing_offer.response",
     );
     expect(pairingResponses[0]?.payload.relayEnabled).toBe(false);
-    expect(pairingResponses[1]?.payload.relayEnabled).toBe(true);
-    expect(pairingResponses[1]?.payload.url).toContain("#offer=");
+    expect(pairingResponses[1]?.payload.relayEnabled).toBe(false);
+    expect(pairingResponses[1]?.payload.url).toBe("");
   });
 
   test("diagnostics includes a log tail and redacts connection secrets", async () => {

@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "Paseo desktop capture is only supported on Linux." >&2
+  exit 1
+fi
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)
 ELECTRON="$REPO_ROOT/node_modules/.bin/electron"

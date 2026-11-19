@@ -1,23 +1,25 @@
 # Architecture
 
-Paseo is a client-server system for monitoring and controlling local AI coding agents. The daemon runs on your machine, manages agent processes, and streams their output in real time over WebSocket. Clients (mobile app, CLI, desktop app) connect to the daemon to observe and interact with agents.
+Paseo is a client-server system for monitoring and controlling local AI coding agents. The daemon runs on your Linux machine, manages agent processes, and streams their output in real time over WebSocket. The browser/web UI, CLI, and Linux desktop app connect to the daemon to observe and interact with agents.
 
 Your code never leaves your machine. Paseo is local-first.
 
 Daemon-owned outbound connections and routed API scope ownership are described in
 [Connected hosts](connected-hosts.md).
 
+This fork supports Linux desktop, browser/web UI, and CLI with direct or SSH connections. Docker, iOS/Android and their stores/F-Droid, relay, Windows, macOS, and Nix packaging are disabled or removed. Shared upstream native code and protocol branches remain where they reduce merge conflicts, not as supported products; consult the [upstream merge skill](../.agents/skills/merge-upstream/SKILL.md).
+
 ## System overview
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Mobile App  │    │     CLI     │    │ Desktop App │
-│   (Expo)     │    │ (Commander) │    │ (Electron)  │
+│  Browser UI │    │     CLI     │    │ Desktop App │
+│  (Expo web) │    │ (Commander) │    │ (Electron)  │
 └──────┬───────┘    └──────┬──────┘    └──────┬──────┘
        │                   │                  │
        │    WebSocket      │    WebSocket     │    Managed subprocess
-       │    (direct or     │    (direct)      │    + WebSocket
-       │     via relay)    │                  │
+       │    (direct)        │    (direct/SSH)  │
+       │                    │                 │
        └───────────┬───────┴──────────────────┘
                    │
             ┌──────▼──────┐
@@ -37,10 +39,9 @@ Daemon-owned outbound connections and routed API scope ownership are described i
 ## Components at a glance
 
 - **Daemon:** Local server that spawns and manages agent processes and exposes the WebSocket API.
-- **App:** Cross-platform Expo client for iOS, Android, web, and the shared UI used by desktop.
+- **App:** Expo web client and the shared UI used by Linux desktop.
 - **CLI:** Terminal interface for agent workflows that can also start and manage the daemon.
-- **Desktop app:** Electron wrapper around the web app that bundles and auto-manages its own daemon.
-- **Relay:** Optional encrypted bridge for remote access without opening ports directly.
+- **Desktop app:** Linux Electron wrapper around the web app that bundles and auto-manages its own daemon, with direct and SSH host connections.
 
 ## Packages
 
@@ -52,7 +53,6 @@ The heart of Paseo. A Node.js process that:
 - Manages agent lifecycle (create, run, stop, resume, archive)
 - Streams agent output in real time via a timeline model
 - Provides agent-to-agent tools through a transport-neutral tool catalog, with MCP as one adapter
-- Optionally connects outbound to a relay for remote access
 - Optionally serves the browser web client from the same HTTP server (self-hosting guide: [public-docs/web-ui.md](../public-docs/web-ui.md))
 
 All paths are under `packages/server/src/`.
@@ -88,7 +88,7 @@ workspace for a directory clears it. The store lives in memory and resets on dae
 
 | Module                          | Responsibility                                                                 |
 | ------------------------------- | ------------------------------------------------------------------------------ |
-| `server/bootstrap.ts`           | Daemon initialization: HTTP server, WS server, agent manager, storage, relay   |
+| `server/bootstrap.ts`           | Daemon initialization: HTTP server, WS server, agent manager, storage          |
 | `server/websocket-server.ts`    | WebSocket connection management, hello handshake, binary frame routing         |
 | `server/session.ts`             | Per-client session state, timeline subscriptions, terminal operations          |
 | `server/directory-sync/`        | Daemon-global latest-state sequences for projects, workspaces, and agents      |
@@ -99,7 +99,7 @@ workspace for a directory clears it. The store lives in memory and resets on dae
 | `server/agent/mcp-server.ts`    | Thin MCP adapter that registers the Paseo tool catalog with the MCP SDK        |
 | `server/agent/providers/`       | Provider adapters (see "Agent providers" below)                                |
 | `server/orchestration-skills/`  | Bundled catalog, host selection, convergence, and skill-directory transactions |
-| `server/relay-transport.ts`     | Outbound relay connection with E2E encryption                                  |
+| `server/relay-transport.ts`     | Retained upstream relay implementation; disabled in this fork                  |
 | `server/schedule/`              | Cron-based scheduled agents                                                    |
 
 ### `packages/protocol` — Wire schemas and shared protocol types
@@ -121,12 +121,12 @@ code imports from `@getpaseo/client`.
 host's client; plugin subprocesses use the same facade over a host-owned IPC transport. Protocol capability ownership and subscription lifetimes follow
 [the client contract](protocol-compatibility.md#client-capability-ownership).
 
-### `packages/app` — Mobile + web client (Expo)
+### `packages/app` — Web and shared desktop client (Expo)
 
-Cross-platform React Native app that connects to one or more daemons.
+React Native/Expo source rendered on the web and in the Linux desktop app. Native-specific files remain as upstream merge context, not native app targets.
 
 - Expo Router navigation (`/h/[serverId]/workspace/[workspaceId]`, `/h/[serverId]/agent/[agentId]`, etc.). The `workspaceId` URL segment is an opaque workspace id, not a directly meaningful filesystem path.
-- `HostRuntimeController` manages saved host connections, reconnection, and per-host runtime state. Direct TCP and relay connections use the ordinary client transport; desktop socket, pipe, and SSH connections cross one Electron-owned transport boundary. SSH only tunnels to an already-running daemon.
+- `HostRuntimeController` manages saved host connections, reconnection, and per-host runtime state. Direct TCP uses the ordinary client transport; desktop socket and SSH connections cross one Electron-owned transport boundary. SSH only tunnels to an already-running daemon. Relay and Windows pipe paths are unsupported retained upstream code.
 - `runtime/replica-cache` is typed storage behind the directory and timeline owners. It never observes or mutates `SessionStore`.
 - `runtime/directory-sync` owns directory cache selection and network reconciliation. On demand it paints accepted rows for one host, then passes the persisted per-entity cursor through `project.list`, `fetch_workspaces`, and `fetch_agents`; the daemon returns each entity's latest projection when its sequence is newer, plus tombstones.
 - `workspace-labels` owns one sequenced catalog replica per connected host, the deterministic cross-host projection that surfaces spanning hosts use (the filter page, the manager), and the per-host resolution a workspace row's chips use. Two hosts may give one name different colors, so a row resolves against its own host's catalog and a merged answer would be wrong there. Catalogs never synchronize between hosts; assignment creates a missing definition only on the target host. On the daemon, catalog and assignment rewrites share a journaled commit boundary. Startup recovery completes that commit before workspace or catalog publication.
@@ -164,10 +164,10 @@ traffic. Workspace assignments stay on the workspace directory sequence.
 
 ### `packages/cli` — Command-line client
 
-Commander.js CLI with Docker-style commands. Common agent operations are also exposed at the top level (e.g. `paseo ls`, `paseo run`).
+Commander.js CLI with resource-oriented commands. Common agent operations are also exposed at the top level (e.g. `paseo ls`, `paseo run`).
 
 - `paseo agent ls/run/import/attach/logs/stop/delete/send/inspect/wait/archive/reload/update/mode`
-- `paseo daemon start/run/stop/restart/status/reload/config/pair/set-password`
+- `paseo daemon start/run/stop/restart/status/reload/config/set-password`
 - `paseo terminal ls/create/capture/send-keys/kill`
 - `paseo script ls/start/stop`
 - `paseo schedule create/ls/inspect/update/pause/resume/run-once/logs/delete`
@@ -181,21 +181,9 @@ Commander.js CLI with Docker-style commands. Common agent operations are also ex
 
 Communicates with the daemon via the same WebSocket protocol as the app.
 
-### `packages/relay` — Relay transport and E2E encryption
+### `packages/relay` — Retained upstream transport code
 
-Enables remote access when the daemon is behind a firewall.
-
-- Updated peers negotiate a Noise `NK` session with per-record counters; peers on either side that predate it fall back to the legacy NaCl `box` construction. [docs/relay-endpoint-security.md](relay-endpoint-security.md) owns the mapping, negotiation, and the `daemon.relay.requireProtectedSecurity` flag
-- The relay is zero-knowledge — it routes encrypted bytes and cannot read content
-- Client and daemon channels with identical API (`openClientSecureChannel`, `openDaemonSecureChannel`)
-- Pairing via QR code transfers the daemon's public key to the client
-- New homes keep relay disabled until pairing consent. `DaemonConfigStore` persists the desired state, while the relay runtime starts or stops the outbound transport live; pairing reads that current state instead of a startup snapshot.
-- Optional E2EE capability negotiation preserves application frame kind: text plaintext uses base64 ciphertext text frames, while binary plaintext uses raw ciphertext binary frames; mixed-version peers remain base64-only
-- Self-hosted relays opt into TLS with `daemon.relay.useTls` or `PASEO_RELAY_USE_TLS=true`; the public (client-facing) TLS setting can be overridden independently via `daemon.relay.publicUseTls` or `PASEO_RELAY_PUBLIC_USE_TLS`
-
-The production relay server lives in [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay). It is a distributed Elixir service. The Cloudflare relay implementation in this monorepo is retained as legacy code and is not deployed.
-
-See [SECURITY.md](../SECURITY.md) for the full threat model.
+Relay encryption and protocol helpers remain as shared dependencies to keep upstream merges manageable. This fork does not connect to or deploy a relay, enable relay pairing, or support pairing-offer URLs. Existing relay configuration does not make relay a supported transport. Use direct connections, a VPN, or SSH instead; see [Connectivity](../public-docs/connectivity.md).
 
 ### Paseo Hub
 
@@ -204,11 +192,11 @@ authorization, ownership, persistence, and lifecycle contract is documented in [
 
 ### `packages/desktop` — Desktop app (Electron)
 
-Electron wrapper for macOS, Linux, and Windows.
+Electron wrapper for Linux.
 
 - Can spawn the daemon as a managed subprocess
 - Native file access for workspace integration
-- Same WebSocket client as mobile app
+- Same WebSocket client as the browser UI
 
 The desktop does not manage agent skills. It retains one compatibility reader for the old
 `skill-selection.json`, imports that preference into its managed local daemon, then deletes the old
@@ -278,9 +266,9 @@ its teardown; reconnect creates new server IDs for surviving client handles. See
 
 Client liveness checks use the top-level JSON `ping`/`pong` envelope, not a session RPC or RFC6455 control ping. Current clients ping every 10 seconds, beginning one interval after connecting; a window with no validated inbound frame is a miss, and two misses in a row tear the socket down. When the app returns to the foreground the client runs a fresh cycle of two 5-second windows back to back, then reconnects without backoff, because a socket that died while the OS had JS suspended stays `OPEN` and accepts sends: only inbound frames prove it. Misses and probes from before the suspension do not count toward that cycle, and a window whose timer fires long after its deadline spanned another suspension, so it is discarded and the cycle starts over. Any complete frame inside a window keeps the connection, so a slow multi-frame transfer survives; a single frame that takes longer than the two windows to arrive after foreground does not, and the fix for that is smaller daemon-to-client frames, not a longer window. The first ping claims an application-ownership lease for that physical socket, all later inbound activity renews it, and the daemon forcibly terminates the socket if the lease expires. A legacy or raw socket that never sends an application ping never enters this lease and is not closed for omitting one. Session RPC timeouts are operation failures, not proof that the socket is dead. A subscription bootstrap timeout closes its source to clear any unknown server-owned registration; the failed handle is released before other surviving handles reconnect.
 
-Every physical send path enforces an 8 MiB outbound high-water mark, including JSON broadcasts, binary terminal frames, and the encrypted relay adapter's asynchronous queue. This sits above the terminal stream's 4 MiB soft backpressure threshold, leaving room for snapshot catch-up before the hard cutoff. JSON is serialized once per broadcast after sockets already at the limit are removed, then its exact byte length is checked for every remaining socket. A frame that would cross the limit is not sent; that physical socket is forcibly terminated without disturbing other sockets attached to the same logical session. Multiple tabs and simultaneous direct and relay paths may legitimately share a client id.
+Every physical send path enforces an 8 MiB outbound high-water mark, including JSON broadcasts and binary terminal frames. The retained upstream encrypted adapter has the same queue limit, but relay transport is disabled in this fork. This sits above the terminal stream's 4 MiB soft backpressure threshold, leaving room for snapshot catch-up before the hard cutoff. JSON is serialized once per broadcast after sockets already at the limit are removed, then its exact byte length is checked for every remaining socket. A frame that would cross the limit is not sent; that physical socket is forcibly terminated without disturbing other sockets attached to the same logical session. Multiple tabs may legitimately share a client id.
 
-Client session RPC waits default to 60s so slow relay or mobile networks do not turn a live but delayed daemon response into a false operation failure. Keep connect timeouts, app-level grace windows, explicit diagnostic latency probes, liveness ping timers, and genuinely long-running RPCs separate from this default.
+Client session RPC waits default to 60s so slow networks do not turn a live but delayed daemon response into a false operation failure. Keep connect timeouts, app-level grace windows, explicit diagnostic latency probes, liveness ping timers, and genuinely long-running RPCs separate from this default.
 
 New session RPCs use dotted names with `.request` and `.response` suffixes, such as `checkout.forge.set_auto_merge.request` and `checkout.forge.set_auto_merge.response`. See [rpc-namespacing.md](rpc-namespacing.md) for the convention and migration rules for older flat RPC names.
 
@@ -483,8 +471,8 @@ $PASEO_HOME/
 ├── projects/icons/                             # Custom project icon images
 ├── schedules/                                  # Scheduled-agent definitions and runs
 ├── config.json                                 # Daemon config (mutable)
-├── daemon-keypair.json                         # Daemon identity for relay/E2EE
-├── push-tokens.json                            # Mobile push tokens
+├── daemon-keypair.json                         # Retained upstream relay identity, if present
+├── push-tokens.json                            # Retained upstream mobile state, if present
 ├── paseo.pid                                   # Supervisor identity and published bound endpoint
 └── daemon.log                                  # Daemon trace logs (rotated)
 ```
@@ -496,7 +484,7 @@ Worker restart retains supervisor arguments/environment and rereads the configur
 ## Outbound networking
 
 The daemon and its plugin processes honor `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY`
-(including lowercase forms, which take precedence). Fetch and relay, Hub, and connected-host WebSockets
+(including lowercase forms, which take precedence). Fetch, Hub, and connected-host WebSockets
 share this policy. Loopback (`localhost`, `127.0.0.1`, `::1`) always goes direct.
 A proxy without a scheme uses HTTP. Invalid values and unsupported proxy schemes
 are treated as unset, with one warning naming the variable in `daemon.log`.
@@ -507,4 +495,4 @@ Agent and terminal environments are unchanged. System proxy settings and SOCKS-o
 
 1. **Local daemon** (default): `paseo daemon start` on `127.0.0.1:6767`
 2. **Managed desktop**: Electron uses the server package’s local-instance lifecycle capability for sanitized launch, published readiness, and captured-PID stop. Only Desktop's own launch writes `desktopManaged: true` to `paseo.pid`. The CLI launch path removes the flag. While Desktop manages the built-in daemon, an app update or a version mismatch replaces any `desktopManaged` daemon, including one that an earlier Desktop session left running. Bundled CLIs before v0.9.0 exported the flag, so a daemon that one of them started also carries it and is replaced. Quit, Settings, and host removal stop only a daemon that the current session launched, matched by `{pid, startedAt}`. A daemon that the user started through the CLI is attach-only. Explicit attached Stop requires a confirmation naming the captured home/PID. Ordinary Restart uses the worker RPC on every app platform.
-3. **Remote + relay**: Daemon behind firewall, relay bridges with E2E encryption
+3. **Remote direct or SSH**: Run a Linux daemon on the remote host, then connect over a trusted LAN/VPN, an HTTPS reverse proxy, or SSH. Browser clients use direct HTTP/WebSocket access; desktop and CLI can also tunnel through SSH.

@@ -11,6 +11,9 @@
     "dist",
     "!dist/**/*.map"
   ],
+  "os": [
+    "linux"
+  ],
   "type": "module",
   "publishConfig": {
     "access": "public"

@@ -2,6 +2,12 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 
+if (process.platform !== "linux") {
+  throw new Error(
+    `Paseo daemon development is only supported on Linux (received ${process.platform}).`,
+  );
+}
+
 dotenv.config({
   path: fileURLToPath(new URL("../.env", import.meta.url)),
   quiet: true,

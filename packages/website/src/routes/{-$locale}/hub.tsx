@@ -454,7 +454,7 @@ const DIAGRAM_DAEMONS = [
   { name: "Hetzner VM", agents: [CLAUDE_MARK, PI_MARK] },
 ];
 
-const DIAGRAM_CLIENTS = ["desktop", "web", "mobile", "cli"] as const;
+const DIAGRAM_CLIENTS = ["desktop", "web", "cli"] as const;
 
 function Shape() {
   const { t } = useTranslation();

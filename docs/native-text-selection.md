@@ -1,5 +1,7 @@
 # Native text selection
 
+Retained upstream native-rendering design context only. This fork supports Linux desktop and browser text selection, not native iOS/Android clients; see the shared [Markdown renderer](markdown-renderer.md) for the supported rendering boundary.
+
 Keep completed assistant prose in one native text view so selection crosses paragraphs, headings and lists. The shared [Markdown renderer](markdown-renderer.md) owns that view.
 
 ## Diagrams in lists and quotes

@@ -1,3 +1,4 @@
+import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import type {
   DaemonTransportFactory,
   WebSocketFactory,
@@ -44,6 +45,9 @@ nativeWebSocketFactory.supportsDrain = false;
 
 export function createWebSocketTransportFactory(factory: WebSocketFactory): DaemonTransportFactory {
   return ({ url, headers, protocols }) => {
+    if (isRelayClientWebSocketUrl(url) || /^relay:/i.test(url)) {
+      throw new Error("Relay connections are not supported. Use a direct or SSH connection.");
+    }
     const ws = factory(url, { headers, protocols });
     if ("binaryType" in ws) {
       try {

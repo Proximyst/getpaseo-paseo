@@ -19,16 +19,9 @@
   "types": "build/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "clean": "expo-module clean",
-    "dev": "expo-module build",
-    "lint": "expo-module lint",
-    "test": "expo-module test",
     "format": "oxfmt --check .",
     "format:fix": "oxfmt .",
-    "typecheck": "tsgo --noEmit",
-    "expo-module": "expo-module",
-    "open:ios": "xed examples/basic-usage/ios",
-    "open:android": "open -a \"Android Studio\" examples/basic-usage/android"
+    "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

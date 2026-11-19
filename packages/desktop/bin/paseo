@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "Paseo CLI is only supported on Linux." >&2
+  exit 1
+fi
+
 SCRIPT_PATH=$0
 case "$SCRIPT_PATH" in
   /*) ;;
