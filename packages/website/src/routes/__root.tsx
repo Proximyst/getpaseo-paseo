@@ -16,8 +16,6 @@ const ReleaseCtx = createContext<ReleaseChannels>({
   stable: {
     version: "",
     linuxAppImageAsset: "",
-    windowsX64Asset: null,
-    windowsArm64Asset: null,
   },
   beta: null,
 });

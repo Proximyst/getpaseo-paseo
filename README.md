@@ -35,11 +35,7 @@
   <img src="https://paseo.sh/hero-mockup.png" alt="Paseo app screenshot" width="100%">
 </p>
 
-<p align="center">
-  <img src="https://paseo.sh/mobile-mockup.png" alt="Paseo mobile app" width="100%">
-</p>
-
-Paseo is an open source agentic development environment for desktop, mobile, web, and CLI. Open the desktop app and work: agents, editor, terminals, diffs, pull requests, and a browser in one window. Run many agents at once, each in its own worktree, on one machine or several. The mobile app is the full app, native on iOS and Android.
+This fork of Paseo is an open source agentic development environment for **Linux desktop, browser/web UI, and CLI**. Open the desktop app and work: agents, editor, terminals, diffs, pull requests, and a browser in one window. Run many agents at once, each in its own worktree, on one machine or several. Connect to other Linux hosts directly or over SSH.
 
 - **Parallel agents:** Run many agents at once, each in its own worktree.
 - **Built-in orchestration:** Agents in Paseo can create worktrees, launch other agents, and talk to them, across providers.
@@ -47,7 +43,7 @@ Paseo is an open source agentic development environment for desktop, mobile, web
 - **Self-hosted:** Agents run on your machine with your full dev environment. Use your tools, your configs, and your skills.
 - **Multi-provider:** Claude Code, Codex, Copilot, OpenCode, Pi, Antigravity, and Muse Code through the same interface. Pick the right model for each job.
 - **Voice control:** Dictate tasks or talk through problems in voice mode. Hands-free when you need it.
-- **Cross-device:** iOS, Android, desktop, web, and CLI. Start work at your desk, check in from your phone, script it from the terminal.
+- **Multiple clients:** Use the Linux desktop app, a browser, or the CLI with your local and remote daemons.
 - **Privacy-first:** Paseo doesn't have any telemetry, tracking, or forced log-ins.
 
 [Run parallel tasks in Paseo](https://paseo.sh/docs/parallel-development): start agents in separate worktrees, review their diffs, run each app, and check it in the built-in browser.
@@ -65,8 +61,7 @@ Paseo is an open source agentic development environment for desktop, mobile, web
 
 ## Plugins
 
-Plugins run on the daemon and show up in every client you connect, with the same UI on desktop, web,
-iOS, and Android. Write a plugin once and it is on your phone.
+Plugins run on the daemon and show up in connected Linux desktop and browser clients.
 
 - **UI:** screens, sidebar items, workspace panels, Command Center items, slash commands, composer pills, attachment sources, timeline items, themes.
 - **Agent lifecycle:** change configuration, environment, and MCP servers, answer permissions, follow up when a turn ends.
@@ -80,7 +75,7 @@ Plugins run with access to your daemon machine and inside connected clients; ins
 
 ## Getting Started
 
-Paseo runs a local server called the daemon that manages your coding agents. Clients like the desktop app, mobile app, web app, and CLI connect to it.
+Paseo runs a local server called the daemon that manages your coding agents. The Linux desktop app, browser web UI, and CLI connect to it.
 
 ### Prerequisites
 
@@ -94,11 +89,11 @@ You need at least one agent CLI installed and configured with your credentials:
 - [Antigravity](https://paseo.sh/docs/supported-providers#antigravity)
 - [Muse Code](https://paseo.sh/docs/muse-code)
 
-### Desktop app (recommended)
+### Linux desktop app (recommended)
 
-Download it from [paseo.sh/download](https://paseo.sh/download) or the [GitHub releases page](https://github.com/getpaseo/paseo/releases). Open the app and the daemon starts automatically. Nothing else to install.
+Use the Linux packages from this fork's releases, or [build the desktop app](docs/development.md). Open the app and the daemon starts automatically. Upstream download links and translated READMEs describe upstream releases, not this fork's supported targets.
 
-To connect from your phone, open **Settings → your host → Pair Device**.
+On Arch Linux, [build and install the fork with the root `PKGBUILD`](docs/development.md#arch-linux-package).
 
 ### Server
 
@@ -109,28 +104,13 @@ npm install -g @getpaseo/cli
 paseo
 ```
 
-Paseo starts, then asks whether to enable the end-to-end encrypted relay for device pairing. If you decline, connect directly over TCP, Tailscale, or another VPN. The desktop, mobile, and web apps connect to this daemon like any other host.
+Paseo starts a local daemon. Connect remote clients directly over a trusted LAN/VPN, or use SSH from the desktop app or CLI. Relay transport and native mobile apps are not supported in this fork.
 
 For full setup and configuration, see:
 
-- [Docs](https://paseo.sh/docs)
-- [Connectivity guide](https://paseo.sh/docs/connectivity)
-- [Configuration reference](https://paseo.sh/docs/configuration)
-
-### Docker
-
-Run the Paseo daemon and self-hosted web UI in Docker:
-
-```bash
-docker run -d --name paseo \
-  -p 6767:6767 \
-  -e PASEO_PASSWORD=change-me \
-  -v "$PWD/paseo-home:/home/paseo" \
-  -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
-```
-
-Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
+- [Getting started](public-docs/index.md)
+- [Connectivity guide](public-docs/connectivity.md)
+- [Configuration reference](public-docs/configuration.md)
 
 ## CLI
 
@@ -148,7 +128,7 @@ paseo send abc123 "also add tests" # follow-up task
 paseo run --host workstation.local:6767 --cwd /workspace "run the full test suite"
 ```
 
-See the [full CLI reference](https://paseo.sh/docs/cli) for more.
+See the [full CLI reference](public-docs/cli.md) for more.
 
 ## TypeScript SDK
 
@@ -162,7 +142,7 @@ await client.connect();
 
 const agent = await client.agents.create({
   config: { provider: "codex/gpt-5.5" },
-  cwd: "/Users/me/dev/storefront",
+  cwd: "/home/me/dev/storefront",
   prompt: "Review the current diff and name the riskiest change.",
 });
 
@@ -193,10 +173,10 @@ Then use them in any agent conversation:
 Quick monorepo package map:
 
 - `packages/server`: Paseo daemon (agent process orchestration, WebSocket API, MCP server)
-- `packages/app`: Expo client (iOS, Android, web)
+- `packages/app`: Expo web client and shared desktop UI (upstream native code retained but disabled)
 - `packages/cli`: `paseo` CLI for daemon and agent workflows
-- `packages/desktop`: Electron desktop app
-- `packages/relay`: Relay transport and encryption used by the daemon and clients
+- `packages/desktop`: Linux Electron desktop app
+- `packages/relay`: Retained upstream transport/encryption dependency; relay connections are disabled
 - `packages/website`: Marketing site and documentation (`paseo.sh`)
 
 Common commands:
@@ -218,13 +198,16 @@ npm run build:server
 npm run typecheck
 ```
 
+### Retained upstream code
+
+Shared React Native components, platform-specific branches, and relay protocol code remain where removing them would make upstream merges harder. Their presence is not a support commitment: this fork ships Linux desktop and npm packages, supports the browser UI and CLI, and uses direct or SSH connections only. Docker, iOS/Android, app stores/F-Droid, Windows, macOS, and relay deployment are outside its supported scope. See the [upstream merge skill](.agents/skills/merge-upstream/SKILL.md) before importing changes that could re-enable them.
+
 ## Support Paseo
 
 Paseo is an independent project used by tens of thousands of developers daily, built by one person and funded by the people who use it. Support the work on [GitHub Sponsors](https://github.com/sponsors/boudra). Companies can [sponsor Paseo](https://paseo.sh/sponsor#spot) monthly and have their logo shown at the top of this README and on the paseo.sh homepage and docs.
 
 ## Related projects
 
-- [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) — official distributed relay, written in Elixir
 - [paseo-vscode](https://marketplace.visualstudio.com/items?itemName=hinnes.paseo-vscode) — VS Code extension
 
 ## License

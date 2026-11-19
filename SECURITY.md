@@ -1,21 +1,20 @@
 # Security
 
-Paseo follows a client-server architecture, similar to Docker. The daemon runs on your machine and manages your coding agents. Clients (the mobile app, CLI, or web interface) connect to the daemon to monitor and control those agents.
+Paseo follows a client-server architecture. The daemon runs on your Linux machine and manages your coding agents. Linux desktop, CLI, and browser clients connect to monitor and control those agents.
 
 Your code never leaves your machine. Paseo is a local-first tool that connects directly to your development environment.
 
 ## Architecture
 
-The Paseo daemon can run anywhere you want to execute agents: your laptop, a Mac Mini, a VPS, or a Docker container. The daemon listens for connections and manages agent lifecycles.
+The supported daemon runs on a Linux workstation or server. Clients use direct WebSocket connections, optionally secured by a VPN or TLS reverse proxy. Linux desktop and CLI also support SSH tunneling to an already-running daemon.
 
-Clients connect to the daemon over WebSocket. There are two ways to establish this connection:
+This fork does not support Docker deployment, native iOS/Android apps, relay connections or pairing, Windows, or macOS. Shared upstream cryptography and platform branches remain where required by common dependencies and upstream merging; their presence does not enable those products. See [Connectivity](public-docs/connectivity.md) and the [upstream merge skill](.agents/skills/merge-upstream/SKILL.md).
 
-- **Relay connection** — The daemon connects outbound to our relay server, and clients meet it there. No open ports required.
-- **Direct connection** — The daemon listens on a network address and clients connect directly.
+## Retained upstream relay threat model
 
-## Relay threat model
+The following section documents disabled upstream code and its cryptographic assumptions, not an available transport. Relay connection, pairing, and deployment are unavailable in this fork; use direct access or SSH instead.
 
-The relay is designed to be untrusted. All traffic between your phone and daemon is end-to-end encrypted. The relay server cannot read your messages, see your code, or modify traffic without detection. Even if the relay is compromised, your data remains protected.
+Upstream's relay is designed to be untrusted. Its endpoint-to-endpoint traffic is encrypted; the relay routes ciphertext rather than application content.
 
 ### How it works
 
@@ -50,19 +49,15 @@ By default, the daemon binds to `127.0.0.1`. With no password configured, anythi
 
 The daemon supports an optional shared-secret password (set via `auth.password` in `config.json` or the `PASEO_PASSWORD` env var; stored bcrypt-hashed). WebSocket clients send the password in `hello`; the daemon sends no session data before admission. Direct connections still accept bearer headers and WebSocket bearer subprotocols for older clients. HTTP stays bearer-header based. Health (`GET /api/health`) and CORS preflight (`OPTIONS`) are exempt; `/api/files/download` and `/mcp/agents` use their own capability tokens.
 
-The daemon writes a new `$PASEO_HOME/local-credential` on every run with mode `0600` and removes it on shutdown. The CLI and desktop main process read it only for the daemon whose PID lock `listen` matches their connection target. A same-user process can read this credential, so the password protects against network clients and other OS users, not processes running as the daemon user. Protect `$PASEO_HOME` accordingly. Relay traffic remains end-to-end encrypted independently of password admission.
+The daemon writes a new `$PASEO_HOME/local-credential` on every run with mode `0600` and removes it on shutdown. The CLI and desktop main process read it only for the daemon whose PID lock `listen` matches their connection target. A same-user process can read this credential, so the password protects against network clients and other OS users, not processes running as the daemon user. Protect `$PASEO_HOME` accordingly.
 
 Connected clients are trusted operators of the daemon user. File previews follow that authority: a preview request may read any regular file the daemon process can read, while keeping path normalization and symlink checks in the daemon file service. Workspace-relative paths remain a UI convenience, not a security boundary.
 
 When Paseo checks out a change request from a different repository, it does not run that workspace's `paseo.json` setup, automatic terminals, named scripts, or teardown until you explicitly run setup for that workspace. The decision lasts for the workspace and does not re-prompt after new commits. Same-repository changes, ordinary branches, local workspaces, agent launches, terminals, explicit shell commands, and metadata-generation instructions are outside this gate.
 
-If you expose the daemon beyond loopback, such as by binding to `0.0.0.0`, forwarding it through a tunnel or reverse proxy, or publishing it from a Docker container, you are responsible for restricting and securing that access. Setting a password is strongly recommended in that case.
+If you expose the daemon beyond loopback, such as by binding to `0.0.0.0` or forwarding it through a tunnel or reverse proxy, you are responsible for restricting and securing that access. Set a daemon password before exposing it.
 
-In Docker, the official image runs the daemon and agents as the non-root
-`paseo` user by default. Mounted workspaces and credentials are still fully
-available to anything the agents run inside the container.
-
-For remote access, use the relay connection. It is the supported path for reaching the daemon off-machine, and it adds end-to-end encryption plus a pairing handshake before commands are accepted.
+For remote access, use SSH, a trusted VPN, or HTTPS/WSS through a TLS reverse proxy. Direct password authentication does not encrypt traffic.
 
 Host header validation and CORS origin checks are defense-in-depth controls for localhost exposure. They help block DNS rebinding and browser-based attacks, but they do not replace network isolation.
 
@@ -80,7 +75,7 @@ The document loads with an opaque origin and a policy that permits inline script
 
 One gap remains on web and desktop: a sandboxed document may navigate _itself_, and no CSP directive in current browsers prevents that. `navigate-to` was dropped from CSP Level 3 and is not enforced, and `<meta http-equiv="refresh">` needs no script at all. A hostile page can therefore reach a server by navigating away, carrying data available inside the preview, such as its own contents, browser and device properties, user input inside the page, and your IP address. It cannot read Paseo, another file, storage, or cookies.
 
-Native builds narrow this gap rather than closing it outright. The WebView refuses every navigation after the initial document, but that decision is made in the app's JavaScript, and on Android the WebView falls back to allowing a navigation when the decision doesn't come back in time. Treat it as a strong mitigation, not a guarantee: if the JS thread is stalled at the moment a page navigates, the same leak is possible there too.
+Retained upstream native builds narrow this gap rather than closing it outright. They are not supported targets in this fork. Their WebView refuses navigation after the initial document, but Android's asynchronous decision can time out and permit navigation; this is design context, not a mitigation available to supported browser/desktop clients.
 
 If you don't trust a page, read it in `Source`, which executes nothing. Source is available as an editable view on supported web hosts and a read-only view everywhere else.
 

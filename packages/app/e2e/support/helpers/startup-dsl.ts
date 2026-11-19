@@ -204,7 +204,7 @@ class StartupAssertions {
 async function installPendingDesktopBridge(page: Page): Promise<void> {
   await page.addInitScript(() => {
     (window as unknown as { paseoDesktop: unknown }).paseoDesktop = {
-      platform: "darwin",
+      platform: "linux",
       invoke: async (command: string) => {
         if (command === "start_desktop_daemon") {
           await new Promise(() => {

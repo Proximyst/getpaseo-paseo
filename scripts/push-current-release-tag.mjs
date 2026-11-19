@@ -22,12 +22,12 @@ function runQuiet(cmd, args) {
 
 function getRemoteTagCommit(tag) {
   try {
-    return runQuiet("git", ["ls-remote", "--exit-code", "--refs", "origin", `refs/tags/${tag}^{}`])
+    return runQuiet("git", ["ls-remote", "--exit-code", "--refs", "fork", `refs/tags/${tag}^{}`])
       .split(/\s+/)[0]
       .trim();
   } catch {
     try {
-      return runQuiet("git", ["ls-remote", "--exit-code", "--refs", "origin", `refs/tags/${tag}`])
+      return runQuiet("git", ["ls-remote", "--exit-code", "--refs", "fork", `refs/tags/${tag}`])
         .split(/\s+/)[0]
         .trim();
     } catch {
@@ -87,7 +87,7 @@ const branchRef = args.branch || currentBranch;
 if (!branchRef) {
   throw new Error("Cannot determine branch to push. Pass --branch <name>.");
 }
-run("git", ["push", "origin", `HEAD:${branchRef}`]);
+run("git", ["push", "fork", `HEAD:${branchRef}`]);
 
 const remoteTagCommit = getRemoteTagCommit(tag);
 
@@ -98,9 +98,9 @@ if (remoteTagCommit) {
         "Refusing to reuse an existing release tag for a different commit.",
     );
   }
-  console.log(`Tag ${tag} already exists on origin`);
+  console.log(`Tag ${tag} already exists on fork`);
 } else {
-  run("git", ["push", "origin", tag]);
+  run("git", ["push", "fork", tag]);
 }
 
 console.log(`Release push complete: branch HEAD and tag ${tag}`);

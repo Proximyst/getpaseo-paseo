@@ -1558,6 +1558,9 @@ export class DaemonClient {
   // ============================================================================
 
   async connect(): Promise<void> {
+    if (isRelayClientWebSocketUrl(this.config.url) || /^relay:/i.test(this.config.url)) {
+      throw new Error("Relay connections are not supported. Use a direct or SSH connection.");
+    }
     if (this.connectionState.status === "disposed") {
       throw new Error("Daemon client is disposed");
     }

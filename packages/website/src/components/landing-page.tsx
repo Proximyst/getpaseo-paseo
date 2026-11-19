@@ -64,18 +64,8 @@ const PHONE_PERSPECTIVE_STYLE = { minHeight: 480, perspective: 700 };
 import { CursorFieldProvider } from "~/components/butterfly";
 import { CommandDialog } from "~/components/command-dialog";
 import { AGENT_PAGES } from "~/data/agent-pages";
-import {
-  appStoreUrl,
-  playStoreUrl,
-  getDesktopDownload,
-  MOBILE_STORES,
-  AppleIcon,
-  PlayStoreIcon,
-  TerminalIcon,
-} from "~/downloads";
-import type { DesktopPlatform, MobilePlatform } from "~/platform";
-import { isMobilePlatform } from "~/platform";
-import { useRelease, useVisitorPlatform } from "~/routes/__root";
+import { getDesktopDownload, TerminalIcon } from "~/downloads";
+import { useRelease } from "~/routes/__root";
 import { HeroMockup } from "~/components/hero-mockup";
 import { useLocale, useLocalizePath } from "~/i18n";
 import {
@@ -108,6 +98,9 @@ interface LandingPageProps {
   subtitle: React.ReactNode;
 }
 
+// Keep the upstream native-client showcase available without advertising unshipped apps.
+const NATIVE_MOBILE_APPS_ENABLED = false;
+
 export function LandingPage({ title, subtitle }: LandingPageProps) {
   return (
     <CursorFieldProvider>
@@ -132,9 +125,7 @@ export function LandingPage({ title, subtitle }: LandingPageProps) {
         </motion.div>
       </div>
 
-      {/* Phone showcase */}
-      <PhoneShowcase />
-
+      {NATIVE_MOBILE_APPS_ENABLED && <PhoneShowcase />}
       {/* Content section */}
       <div className="landing-content bg-background">
         <main className="p-6 md:p-20 md:pt-40 max-w-5xl mx-auto">
@@ -220,22 +211,6 @@ const SOCIAL_PROOF_TWEETS = [
     avatar: "/social-proof/tietougongshiba.jpg",
     url: "https://x.com/tietougongshiba/status/2050886374941925754",
     text: "Being able to check and manage agent progress from my phone while I'm out is so convenient.",
-  },
-  {
-    name: "Jason Torres",
-    handle: "@jasontorres",
-    date: "May 11, 2026",
-    avatar: "/social-proof/jasontorres.jpg",
-    url: "https://x.com/jasontorres/status/2053875385515790731",
-    text: "Can interchange between Codex, Claude Code, Opencode, Pi. Stable mobile and desktop apps connected through a secure relay from your VMs.",
-  },
-  {
-    name: "A9",
-    handle: "@aadtyn",
-    date: "May 29, 2026",
-    avatar: "/social-proof/aadtyn.jpg",
-    url: "https://x.com/aadtyn/status/2060371229773803943",
-    text: "cross platform agent orchestration with inbuilt relay and tailscale / self host daemon options + the best UI ive seen in this segment",
   },
   {
     name: "boris evstratov",
@@ -1100,20 +1075,14 @@ function PhilosophySection() {
 function GetStarted() {
   const { t } = useTranslation();
   const localize = useLocalizePath();
-  const platform = useVisitorPlatform();
   return (
     <div className="pt-10">
       {/* The primary call to action owns its own row on phones so the small icon
           buttons never wrap and orphan one of themselves onto a line alone. It
           still hugs its label rather than stretching across the row. */}
       <div className="mx-auto flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-        {isMobilePlatform(platform) ? (
-          <StoreButton platform={platform} />
-        ) : (
-          <DesktopDownloadButton platform={platform} />
-        )}
+        <DesktopDownloadButton />
         <div className="flex items-center justify-center gap-3">
-          {isMobilePlatform(platform) ? <DesktopAppLink /> : <StoreIconLinks />}
           <ServerInstallButton />
         </div>
       </div>
@@ -1137,68 +1106,16 @@ function GetStarted() {
 
 const PRIMARY_CTA_CLASS =
   "inline-flex items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background hover:bg-foreground/90 transition-colors";
-const SECONDARY_CTA_CLASS =
-  "inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 px-3 py-2.5 text-sm text-white hover:bg-white/10 transition-colors";
 
-function DesktopDownloadButton({ platform }: { platform: DesktopPlatform }) {
+function DesktopDownloadButton() {
   const { t } = useTranslation();
-  const download = getDesktopDownload(useRelease(), platform, useLocale());
+  const download = getDesktopDownload(useRelease(), useLocale());
   const Icon = download.icon;
   return (
     <a href={download.href} className={PRIMARY_CTA_CLASS}>
       <Icon className="h-4 w-4" />
       {t("landing.getStarted.downloadFor", { platform: download.label })}
     </a>
-  );
-}
-
-function StoreButton({ platform }: { platform: MobilePlatform }) {
-  const { t } = useTranslation();
-  const store = MOBILE_STORES[platform];
-  const Icon = store.icon;
-  return (
-    <a href={store.href} target="_blank" rel="noopener noreferrer" className={PRIMARY_CTA_CLASS}>
-      <Icon className="h-4 w-4" />
-      {t("landing.getStarted.getStoreApp", { store: store.label })}
-    </a>
-  );
-}
-
-// On a phone the desktop build is the secondary path, so it points at /download
-// instead of handing the visitor a .dmg they cannot open.
-function DesktopAppLink() {
-  const { t } = useTranslation();
-  const localize = useLocalizePath();
-  return (
-    <a href={localize("/download")} className={SECONDARY_CTA_CLASS}>
-      <Monitor className="h-4 w-4" strokeWidth={1.5} />
-      {t("landing.getStarted.desktopApp")}
-    </a>
-  );
-}
-
-function StoreIconLinks() {
-  return (
-    <>
-      <a
-        href={appStoreUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={SECONDARY_CTA_CLASS}
-        aria-label="App Store"
-      >
-        <AppleIcon className="h-5 w-5" />
-      </a>
-      <a
-        href={playStoreUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={SECONDARY_CTA_CLASS}
-        aria-label="Google Play"
-      >
-        <PlayStoreIcon className="h-5 w-5" />
-      </a>
-    </>
   );
 }
 
@@ -1368,7 +1285,6 @@ const FAQ_ENTRIES = [
 ] as const;
 
 const FAQ_LINKS = {
-  relay: "/docs/security",
   agents: "/agents",
   muse: "/docs/muse-code",
   voice: "/docs/voice",

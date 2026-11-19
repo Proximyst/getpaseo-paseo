@@ -10,13 +10,11 @@ const fixtureTimestamp = Date.now() + 24 * 60 * 60 * 1000;
 const entries = [
   { key: "github-stars:v1", value: "12.3k" },
   {
-    key: "github-release:v2",
+    key: "github-release:v3",
     value: {
       stable: {
         version: "0.15.0",
         linuxAppImageAsset: "Paseo-x86_64.AppImage",
-        windowsX64Asset: "Paseo-Setup-0.15.0-x64.exe",
-        windowsArm64Asset: "Paseo-Setup-0.15.0-arm64.exe",
       },
       beta: null,
     },

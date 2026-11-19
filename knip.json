@@ -51,7 +51,7 @@
       "project": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"]
     },
     "packages/relay": {
-      "entry": ["src/index.ts", "src/e2ee.ts", "src/cloudflare-adapter.ts", "src/**/*.test.ts"],
+      "entry": ["src/index.ts", "src/e2ee.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/website": {
@@ -76,7 +76,6 @@
     "sherpa-onnx-node",
     "@playwright/test",
     "material-icon-theme",
-    "eas-cli",
     "wait-on",
     "concurrently",
     "get-port-cli",
@@ -86,15 +85,5 @@
     "buffer",
     "metro-config"
   ],
-  "ignoreBinaries": [
-    "expo-module",
-    "xed",
-    "eas",
-    "playwright",
-    "wrangler",
-    "powershell",
-    "tsx",
-    "vitest",
-    "open"
-  ]
+  "ignoreBinaries": ["expo-module", "playwright", "tsx", "vitest", "open"]
 }

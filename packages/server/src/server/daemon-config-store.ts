@@ -327,6 +327,9 @@ function compactOwnedPaths(paths: readonly string[], owners: readonly string[]):
 function pickRelayPatch(
   relay: MutableDaemonConfigPatch["relay"],
 ): Pick<SupportedMutableConfigPatch, "relay"> {
+  if (relay?.enabled === true) {
+    throw new Error("Relay connections are not supported.");
+  }
   const picked: NonNullable<SupportedMutableConfigPatch["relay"]> = {
     ...(relay?.enabled !== undefined ? { enabled: relay.enabled } : {}),
     ...(relay?.requireProtectedSecurity !== undefined
@@ -436,7 +439,7 @@ export class DaemonConfigStore {
     this.lastKnownPersisted = this.startupPersisted;
     this.current = MutableDaemonConfigSchema.parse({
       ...foldConfigProfiles({ config: initial, providers: initial.providers, source: "stored" }),
-      relay: initial.relay ?? { enabled: true },
+      relay: { ...initial.relay, enabled: false },
       ...this.readSpeech(this.startupPersisted),
     });
   }
@@ -578,6 +581,7 @@ export class DaemonConfigStore {
         source: "stored",
       }),
       plugins: this.current.plugins,
+      relay: { ...resolved.mutable.relay, enabled: false },
       ...this.readSpeech(persisted),
     });
     const changedSinceLastApply = diffPaths(this.lastKnownPersisted, persisted);

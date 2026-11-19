@@ -153,7 +153,7 @@ describe("paseo daemon bootstrap", () => {
     }
   });
 
-  test("reload applies live HTTP, MCP, Git, provider, relay, and app policies", async () => {
+  test("reload applies live HTTP, MCP, Git, provider, and app policies without enabling relay", async () => {
     const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-config-reload-runtime-"));
     const paseoHome = path.join(paseoHomeRoot, ".paseo");
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
@@ -277,7 +277,6 @@ describe("paseo daemon bootstrap", () => {
           "daemon.git.maxProcessesPerSecond",
           "daemon.hostnames",
           "daemon.mcp.enabled",
-          "daemon.relay.enabled",
           "daemon.trustedProxies",
         ],
         restartRequiredPaths: [],
@@ -327,10 +326,12 @@ describe("paseo daemon bootstrap", () => {
           workspaceId: undefined,
         }),
       ).rejects.toThrow(/disabled/i);
-      expect((await client.getDaemonStatus()).relay?.enabled).toBe(true);
-      expect((await client.getDaemonPairingOffer()).url).toContain(
-        "https://after.example.test/#offer=",
-      );
+      expect((await client.getDaemonStatus()).relay?.enabled).toBe(false);
+      expect(await client.getDaemonPairingOffer()).toMatchObject({
+        relayEnabled: false,
+        url: "",
+        qr: null,
+      });
     } finally {
       configureGitProcessPolicy(DEFAULT_GIT_PROCESS_POLICY);
       await client?.close().catch(() => undefined);
@@ -512,7 +513,7 @@ describe("paseo daemon bootstrap", () => {
     }
   });
 
-  test("relay config changes during Hub enrollment reach the live runtime", async () => {
+  test("relay cannot be enabled during Hub enrollment", async () => {
     const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-relay-startup-"));
     const paseoHome = path.join(paseoHomeRoot, ".paseo");
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
@@ -596,12 +597,14 @@ describe("paseo daemon bootstrap", () => {
         appVersion: "0.1.82",
       });
       await client.connect();
-      await client.patchDaemonConfig({ relay: { enabled: true } });
+      await expect(client.patchDaemonConfig({ relay: { enabled: true } })).rejects.toThrow(
+        "Relay connections are not supported",
+      );
       releaseEnrollment();
       await starting;
 
       const status = await client.getDaemonStatus();
-      expect(status.relay?.enabled).toBe(true);
+      expect(status.relay?.enabled).toBe(false);
     } finally {
       releaseEnrollment();
       await starting.catch(() => undefined);
@@ -915,7 +918,7 @@ export default function contribute(plugin: unknown) {
 
   // POSIX-only: Unix socket listen paths are invalid Windows listen targets.
   test.skipIf(isPlatform("win32"))(
-    "generates a relay pairing offer for unix socket listeners",
+    "does not generate a relay pairing offer for unix socket listeners",
     async () => {
       const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-socket-relay-"));
       const paseoHome = path.join(paseoHomeRoot, ".paseo");
@@ -955,8 +958,7 @@ export default function contribute(plugin: unknown) {
           appBaseUrl: "https://app.paseo.sh",
           includeQr: false,
         });
-        expect(pairing.relayEnabled).toBe(true);
-        expect(pairing.url?.startsWith("https://app.paseo.sh/#offer=")).toBe(true);
+        expect(pairing).toEqual({ relayEnabled: false, url: null, qr: null });
       } finally {
         await daemon.stop().catch(() => undefined);
         await daemon.agentManager.flush().catch(() => undefined);

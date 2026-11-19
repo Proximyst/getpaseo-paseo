@@ -325,7 +325,7 @@
   },
   "home": {
     "metaTitle": "Paseo – 随时随地运行 Claude Code、Codex、Copilot、OpenCode",
-    "metaDescription": "面向 Claude Code、Codex、OpenCode、Pi 以及另外 30 多个编程 Agent 的开源应用。在你自己的机器上并行运行多个 Agent。编辑器、终端、diff、拉取请求和浏览器集于一个窗口。桌面端一次下载即可使用，iOS 和 Android 上提供完整应用。",
+    "metaDescription": "面向 Claude Code、Codex、OpenCode、Pi 以及另外 30 多个编程 Agent 的开源应用。在你自己的机器上并行运行多个 Agent。编辑器、终端、diff、拉取请求和浏览器集于一个窗口。支持 Linux 桌面、浏览器和 CLI。",
     "title": "面向 Agent 的<br/>开发环境",
     "subtitle": "同时运行多个编程 Agent，<mobileBreak/>在任何机器上。<br/>在桌前，也在手机上。"
   },
@@ -426,7 +426,7 @@
       "freeQuestion": "Paseo 免费吗？",
       "freeAnswer": "是的。Paseo 免费且开源。你需要安装 AgentProvider 并使用自己的凭据。语音默认在本地处理，配置后也可以选择使用云端语音服务。",
       "codeQuestion": "我的代码会离开我的机器吗？",
-      "codeAnswer": "Paseo 不会把你的代码发送到任何地方。Agent 在本地运行，像平常一样调用各自的 API。远程访问时，你可以使用可选的<relay>端到端加密中继</relay>，也可以通过局域网直连，或使用你自己的隧道。",
+      "codeAnswer": "Paseo 不会把你的代码发送到任何地方。Agent 在本地运行，像平常一样调用各自的 API。远程访问时，可以通过局域网直连，或使用 SSH 和你自己的隧道。",
       "agentsQuestion": "支持哪些 Agent？",
       "agentsAnswer": "Paseo 支持很多 Provider。它为 Claude、Codex、OpenCode、Pi、OMP、Antigravity 和 Muse Code 提供了专门的实现，并通过 ACP 支持更多 Agent。完整列表见：<agents>所有支持的 Provider</agents>。另见 <muse>Muse Code 的设置与限制</muse>。",
       "providersQuestion": "Paseo 如何运行 Provider？",
@@ -436,7 +436,7 @@
       "voiceQuestion": "语音功能如何工作？",
       "voiceAnswer": "语音默认在你的设备本地运行。你说话，应用转写后以文本形式发送给 Agent。你也可以配置 OpenAI 语音服务，获得更高质量的转写和语音合成。详见<voice>语音文档</voice>。",
       "networkQuestion": "可以从外部网络连接吗？",
-      "networkAnswer": "可以。你可以使用托管中继（端到端加密，Paseo 无法读取你的流量），搭建自己的隧道（Tailscale、Cloudflare Tunnel 等），或直接暴露 daemon 端口。详见<configuration>配置</configuration>。",
+      "networkAnswer": "可以。你可以使用 SSH、搭建自己的隧道（Tailscale、Cloudflare Tunnel 等），或直接连接 daemon。详见<configuration>配置</configuration>。",
       "gitQuestion": "我需要 git 或 GitHub 吗？",
       "gitAnswer": "不需要。Paseo 可在任意目录中工作。worktree 是可选的，只在使用 git 时才相关。你可以在平常工作的任何地方运行 Agent。",
       "banQuestion": "使用 Paseo 会被封号吗？",
@@ -534,8 +534,8 @@
     }
   },
   "download": {
-    "metaTitle": "下载适用于 macOS、Windows、Linux、iOS 和 Android 的 Paseo",
-    "metaDescription": "在所有平台上安装 Paseo。提供 macOS、Windows 和 Linux 原生桌面应用，以及 iOS 和 Android 移动应用。自托管、开源、免费下载。",
+    "metaTitle": "下载适用于 Linux 的 Paseo",
+    "metaDescription": "安装 Linux 桌面版 Paseo，使用浏览器应用或安装 CLI。自托管、开源、免费下载。",
     "title": "下载",
     "whatsNew": "更新内容",
     "desktop": "桌面端",
@@ -627,7 +627,7 @@
       "hubHosting": "自托管或托管",
       "sameRpcs": "与应用和 CLI 相同的 RPC",
       "daemonsRow": "你的 daemon",
-      "directOrRelay": "直连或中继",
+      "directOrRelay": "直连或 SSH",
       "appsRow": "Paseo 应用",
       "desktop": "桌面端",
       "web": "网页端",

@@ -6,8 +6,8 @@ protocols:
   - name: Paseo agent link
     schemes:
       - paseo
+beforePack: ./scripts/check-platform.js
 afterPack: ./scripts/after-pack.js
-afterSign: ./scripts/after-sign.js
 directories:
   output: release
 files:
@@ -39,23 +39,6 @@ publish:
   provider: github
   owner: getpaseo
   repo: paseo
-mac:
-  artifactName: "Paseo-${version}-${arch}.${ext}"
-  minimumSystemVersion: "13.0.0"
-  category: public.app-category.developer-tools
-  icon: assets/icon.icns
-  hardenedRuntime: true
-  notarize: true
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.inherit.plist
-  extraResources:
-    - from: bin/paseo
-      to: bin/paseo
-    - from: assets/icon.png
-      to: icon.png
-  target:
-    - dmg
-    - zip
 linux:
   category: Development
   icon: assets
@@ -85,22 +68,3 @@ appImage:
   # dangles the ~/.local/bin/paseo CLI symlink, which points at $APPIMAGE. The
   # version stays discoverable via the release tag and the in-app version.
   artifactName: "Paseo-${arch}.${ext}"
-win:
-  artifactName: "Paseo-Setup-${version}-${arch}.${ext}"
-  icon: assets/icon.ico
-  extraResources:
-    - from: bin/paseo.cmd
-      to: bin/paseo.cmd
-  target:
-    - target: nsis
-      arch:
-        - x64
-        - arm64
-    - target: zip
-      arch:
-        - x64
-        - arm64
-nsis:
-  oneClick: false
-  perMachine: false
-  allowToChangeInstallationDirectory: true

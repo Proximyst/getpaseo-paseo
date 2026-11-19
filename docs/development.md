@@ -1,9 +1,27 @@
 # Development
 
+This fork is developed on Linux for Linux desktop, browser/web UI, and CLI. Use direct connections or SSH; Docker, native mobile apps/stores/F-Droid, relay, Windows, and macOS are not supported build or deployment targets. Shared native and platform-specific source may remain for upstream merges; see [retained upstream code](../README.md#retained-upstream-code) and the [merge skill](../.agents/skills/merge-upstream/SKILL.md).
+
 ## Prerequisites
 
 - Node.js (see `.tool-versions` for exact version)
 - npm workspaces (comes with Node)
+
+## Arch Linux package
+
+The root `PKGBUILD` builds `paseo-proximyst-git` directly in the local checkout, including uncommitted changes. Install `base-devel`, Git, Node.js, npm, and Python, then run from the repository root:
+
+```sh
+makepkg -si
+```
+
+`makepkg` does not clone or fetch source. Dependency installation and builds run in the checkout containing the recipe: `npm ci` replaces its `node_modules`, and build commands write their normal outputs there. npm dependencies and the pinned Electron runtime are still downloaded. The recipe uses the existing desktop build rather than the system-Electron patches carried by the [official AUR package](https://aur.archlinux.org/packages/paseo).
+
+The recipe enables npm lifecycle scripts even if your npm configuration disables them. They apply the repository's dependency patches and install native modules; skipping them can leave an unusable desktop bundle.
+
+The package includes the desktop app, its managed daemon, browser assets, and CLI. Launch the desktop app with `paseo-desktop`, or use `paseo` for the CLI. It conflicts with upstream Paseo packages that install the same commands. Installation does not start the app or enable a daemon service.
+
+The package omits Electron's updater feed; rebuild through `makepkg` or your package manager for updates. Keep the packaged Chromium sandbox helper root-owned with mode `4755`; do not add `--no-sandbox` to the desktop entry.
 
 ## Running the dev server
 
@@ -29,19 +47,6 @@ the titlebar row. Production builds leave the variable unset and show no label.
 
 `npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:6767` for the packaged app and production-style `~/.paseo` state.
 
-## Nix desktop package
-
-The flake exposes `packages.<system>.desktop` on Linux and macOS:
-
-```bash
-nix build .#desktop
-```
-
-Linux produces the `paseo-desktop` launcher and desktop entry. macOS produces
-`Applications/Paseo.app` plus the `paseo-desktop` launcher. Both use the nixpkgs
-Electron runtime and the checkout's built daemon, client, and renderer rather
-than downloading a published desktop release.
-
 ### PASEO_HOME
 
 `PASEO_HOME` is the directory that holds runtime state (agents, worktrees, workspace config, sockets, daemon log). Resolution rules:
@@ -50,7 +55,6 @@ than downloading a published desktop release.
 - **Repo dev scripts** default to `$ROOT/.dev/paseo-home`, where `$ROOT` is the current checkout or worktree root. This keeps all dev state scoped to the checkout instead of the packaged desktop app.
 - **`npm run cli -- ...`** runs through the same dev-home wrapper as the dev scripts, so the in-repo CLI automatically targets the current checkout's `.dev/paseo-home` and configured dev daemon endpoint.
 - **Paseo-created worktrees** seed `$PASEO_WORKTREE_PATH/.dev/paseo-home` from `$PASEO_SOURCE_CHECKOUT_PATH/.dev/paseo-home` by copying agent and project JSON metadata and configuration. Both this setup and `PASEO_DEV_SEED_HOME` use the same seeder, which disables `agents.resumeOnStartup` in the copied config. Startup repairs copied running records without resuming agents or sending recovery prompts. Schedules and heartbeats (stored under `schedules/`), runtime files, identities, sockets, and logs are not copied. Existing nonempty homes are left unchanged unless explicitly reset. Copied agents still reference the original provider sessions and working directories: manually prompting one reaches that real session.
-- **This repo's worktree setup** also best-effort seeds `packages/app/ios` and the newest `.dev/ios-build` entry from the source checkout so iOS simulator services can reuse native project and Xcode cache state when it is safe enough to do so.
 
 Override knobs:
 
@@ -66,7 +70,6 @@ PASEO_DEV_RESET_HOME=1 npm run dev            # clear and reseed the derived wor
 - Root checkout dev daemon: `localhost:6768`.
 - Root checkout Expo: `http://localhost:8081`.
 - Root checkout desktop dev Expo: first free port from `8082` through `8089`.
-- `npm run dev` (Windows): `localhost:6767` for the daemon.
 
 In Paseo-managed worktree services, use the injected service environment rather than hardcoded root checkout ports.
 
@@ -75,47 +78,6 @@ In Paseo-managed worktree services, use the injected service environment rather 
 Route ownership, startup restore, and native blank-screen gotchas live in
 [expo-router.md](expo-router.md). Read it before changing `packages/app/src/app`,
 startup routing, remembered workspace restore, or active workspace selection.
-
-### iOS simulator preview service
-
-Paseo worktrees expose the native iOS dev app through the `ios-simulator` service in `paseo.json`. The service URL serves the simulator preview at `/.sim`, so the preview link is `${PASEO_URL}/.sim`.
-
-**Prerequisites (macOS only).** The service shells out to the Apple toolchain, so beyond the `npm ci` that worktree setup runs you must install:
-
-- **Xcode** (the full app, not just the Command Line Tools) — install it from the Mac App Store, or from `developer.apple.com/download` for a specific version. It provides `xcodebuild` and `xcrun simctl`; accept its license and let first-run component installation finish before starting the service.
-- **An iOS Simulator runtime with at least one iPhone device type**. Recent Xcode versions may not bundle a runtime — add one via Xcode → Settings → Components (older Xcode: "Platforms"). The service targets `iPhone 16 Pro` by default (override with `PASEO_IOS_DEVICE_TYPE`) and falls back to any iPhone; it fails with `No iPhone simulator device type is installed` when none exist.
-- **Homebrew** — CocoaPods itself installs automatically: `expo prebuild` runs `pod install` on a cold worktree, and when the CocoaPods CLI is missing the runner installs it for you. It tries `gem install cocoapods` first and falls back to Homebrew (`brew install cocoapods`), so having Homebrew available lets that fallback succeed without a manual step.
-
-`serve-sim`, Expo, and Metro come from `npm ci`, and CocoaPods installs itself on the first prebuild as described above.
-
-The service is designed for concurrent worktrees: it derives a deterministic simulator identity from the worktree path, uses the worktree's assigned `PASEO_PORT`, pins `serve-sim` to that simulator UDID, and only tears down that worktree's helper/simulator state. It must not rely on the globally booted simulator or any fixed Metro port.
-
-Worktree setup best-effort seeds the generated iOS project and newest native build cache from the source checkout before the service runs. The service still validates the native project by running Expo prebuild and Xcode; the seed only avoids paying all setup/build cost from a cold worktree every time.
-
-Starting the service must not create, focus, reveal, or leave behind macOS Simulator.app windows — a guard hides Simulator.app every 250ms, so the native window vanishes if you focus it. The user-visible surface is the interactive `/.sim` preview: a `serve-sim` stream (60 FPS MJPEG + a WebSocket control channel) that Metro mounts at `basePath: "/.sim"` (`packages/app/metro.config.cjs`) and that forwards taps and gestures, so first-launch prompts like "Open in PaseoDebug?" are answered there, not in the native window. Open the `${PASEO_URL}/.sim` link the service prints — not `serve-sim`'s raw stream port (`:3100`), which is view-only. Because the stream sits behind the daemon proxy it is convenient for remote viewing but laggy up close; for fast local dev at the Mac, use the native simulator path below.
-
-**Troubleshooting.** If `xcrun simctl` fails with `unable to find utility "simctl"`, the active developer directory is still the Command Line Tools even though Xcode is installed. Point it at Xcode: `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, then confirm with `xcrun --find simctl`.
-
-### Running the iOS app on a local simulator
-
-For fast, native, interactive iOS dev at the Mac — as opposed to the remote `/.sim` preview above — skip the service and build the dev client directly:
-
-```bash
-npm run ios        # → expo run:ios (packages/app): builds and launches the app in the real Simulator.app
-```
-
-`expo run:ios` starts its own Metro and gives you the normal Simulator.app window (full speed, native touch, no stream).
-
-**Pointing the app at a daemon.** The client resolves its local daemon from `EXPO_PUBLIC_LOCAL_DAEMON` (`packages/app/src/runtime/host-runtime.ts`); when unset it falls back to `localhost:6767`, the production `~/.paseo` daemon. To target a worktree's dev daemon instead, set it on the build command:
-
-```bash
-EXPO_PUBLIC_LOCAL_DAEMON=localhost:${PASEO_SERVICE_DAEMON_PORT} npm run ios   # worktree daemon running as a Paseo service
-EXPO_PUBLIC_LOCAL_DAEMON=localhost:6768 npm run ios                          # standalone `npm run dev:server`
-```
-
-The iOS simulator shares the Mac's loopback, so `localhost:<port>` reaches the host daemon directly.
-
-**Gotcha — `EXPO_PUBLIC_*` is inlined into the JS bundle at Metro bundle time, not read at runtime.** Set it in the same shell that starts Metro. If the app still connects to the old daemon, Metro served a cached bundle; re-bundle clean with `cd packages/app && EXPO_PUBLIC_LOCAL_DAEMON=… npx expo start -c` and reload the app.
 
 ### Desktop renderer profiling
 
@@ -298,18 +260,9 @@ That report includes input and composer height changes plus React work grouped i
 stream, and ancestor/root scopes. Ancestor/root timings include descendant work because the Profiler
 boundaries are nested. A printable key after an empty newline should not change either height.
 
-### Preview Windows and Linux window controls on macOS
+### Retained upstream macOS compositor design
 
-Desktop development can replace native macOS traffic lights with Paseo's custom controls:
-
-```bash
-PASEO_DESKTOP_WINDOW_CONTROLS=windows npm run dev:desktop
-PASEO_DESKTOP_WINDOW_CONTROLS=linux npm run dev:desktop
-```
-
-The override is rejected in packaged builds. Restart the desktop process when changing it.
-
-### Desktop macOS compositor watchdog
+This section records retained upstream behavior only; macOS is not a supported target and this watchdog is not part of the Linux runtime.
 
 macOS display sleep can leave Chromium's GPU-process display link — the vsync
 source that drives frame production — stuck on a stale display. The compositor
@@ -338,8 +291,8 @@ forever without a single compositor frame: the renderer loads and runs, but
 `ready-to-show` never fires, so the window is never shown and the app looks like
 it did not start while every process is alive. `showWindowWhenReady`
 (`packages/desktop/src/window/show-when-ready.ts`) shows the main window when
-the document finishes loading if the event has not arrived. The fallback is
-Linux-only; macOS and Windows keep waiting for `ready-to-show`.
+the document finishes loading if the event has not arrived. The supported Linux
+desktop uses this fallback; other platform branches are retained upstream code.
 
 Run the startup regression on Linux with an isolated display:
 
@@ -360,7 +313,7 @@ defaults. The default rotation is `10m` x `3` files everywhere.
 
 ### Git process pressure
 
-If Git refreshes consume too much CPU, disk, or antivirus capacity, especially on Windows, reduce
+If Git refreshes consume too much CPU or disk capacity, reduce
 the daemon-global Git process limits in `$PASEO_HOME/config.json`:
 
 ```json
@@ -624,7 +577,7 @@ install.
 
 ## CLI reference
 
-Use `npm run cli` to run the in-repo CLI from source (`npx tsx packages/cli/src/index.ts`). The script wraps the CLI with `scripts/dev-home.sh`, so it automatically uses this checkout's `.dev/paseo-home` and dev daemon endpoint unless you pass an explicit override. The globally installed `paseo` binary on macOS is a symlink into the installed Paseo desktop app, not this checkout — use it to drive the desktop's built-in daemon, but use `npm run cli` when you want to talk to the CLI you are editing.
+Use `npm run cli` to run the in-repo CLI from source (`npx tsx packages/cli/src/index.ts`). The script wraps the CLI with `scripts/dev-home.sh`, so it automatically uses this checkout's `.dev/paseo-home` and dev daemon endpoint unless you pass an explicit override. A globally installed `paseo` runs its installed version, not this checkout; use `npm run cli` when editing the CLI.
 
 Canonical automation uses `paseo project create/ls/rename/delete`, `paseo workspace create/ls/rename/archive`, `paseo heartbeat create/update/delete`, and the full `paseo schedule` group. MCP heartbeat automation is intentionally smaller: create and delete only. Detach remains an explicit user lifecycle action rather than an agent tool. `paseo run --new-workspace local|worktree` composes workspace creation with agent creation. The old `paseo worktree` and `paseo run --worktree` forms are hidden compatibility aliases.
 

@@ -20,6 +20,24 @@ describe("server config", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
+  test("relay stays disabled with saved, environment, and CLI enablement", () => {
+    const persisted = { version: 1 as const, daemon: { relay: { enabled: true } } };
+    const options = {
+      env: { PASEO_RELAY_ENABLED: "true" },
+      cli: { relayEnabled: true },
+      relayEnabledFallback: true,
+    };
+    expect(
+      resolveConfigFromPersisted("/tmp/paseo-disabled-relay", persisted, options),
+    ).toMatchObject({
+      relayEnabled: false,
+      relayEnabledMutable: false,
+    });
+    expect(resolveReloadableConfig(persisted, options)).toMatchObject({
+      relayEnabled: false,
+    });
+  });
+
   test("resolves reloadable settings without resolving the startup password", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-auth-reload-"));
     roots.push(paseoHome);

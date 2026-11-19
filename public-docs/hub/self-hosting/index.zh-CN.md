@@ -102,24 +102,9 @@ PASEO_BOOTSTRAP_OWNER_PASSWORD=replace-with-a-temporary-password
 
 密码至少需要 12 个字符。登录一次，在控制台中替换密码，然后移除 `PASEO_BOOTSTRAP_OWNER_PASSWORD`。Hub 会保留该账号和组织。
 
-## Docker Compose {#docker-compose}
+## 使用 Caddy 提供 HTTPS {#https-with-caddy}
 
-仓库中包含一个由 Hub 和 PostgreSQL 组成的 Compose 栈：
-
-```sh
-git clone https://github.com/getpaseo/hub.git
-cd hub
-cp .env.example .env
-docker compose up -d
-```
-
-打开 <http://localhost:3000> 并完成浏览器设置。对于公开部署，请在启动栈之前，在 `.env` 中设置 `PASEO_HUB_APP_URL` 以及任何反向代理设置。
-
-该栈在端口 `3000` 上发布 Hub，并把 PostgreSQL 数据保存在一个命名卷中。Hub 镜像是 `ghcr.io/getpaseo/hub:latest`。
-
-### 使用 Caddy 提供 HTTPS {#https-with-caddy}
-
-Compose 在端口 `3000` 上提供纯 HTTP。在同一台主机上运行 Caddy 来终止 TLS：
+本 fork 不提供 Docker 或基于 Dockerfile 的部署方式。在 Linux 主机上通过 npm 运行 Hub，并使用 Caddy 终止 TLS：
 
 ```caddyfile
 hub.example.com {
@@ -129,38 +114,15 @@ hub.example.com {
 
 把 `hub.example.com` 指向该主机，并开放 80 和 443 端口。Caddy 会[自动获取并续期证书](https://caddyserver.com/docs/automatic-https)。
 
-然后在 `.env` 中设置：
+在 Hub 服务的环境变量中设置公开地址和可信代理请求头：
 
 ```dotenv
 PASEO_HUB_APP_URL=https://hub.example.com
 PASEO_HUB_TRUSTED_CLIENT_IP_HEADER=x-forwarded-for
 ```
 
-如果不想让端口 `3000` 暴露在公网接口上，请把 `compose.yml` 中 `hub` 的端口改为 `"127.0.0.1:3000:3000"`。
-
-## Fly {#fly}
-
-克隆仓库，并用你自己控制的名称创建应用和数据库：
-
-```sh
-git clone https://github.com/getpaseo/hub.git
-cd hub
-fly apps create your-hub
-fly postgres create --name your-hub-db
-fly postgres attach your-hub-db -a your-hub
-```
-
-部署 Dockerfile，并为 Hub 提供公开地址：
-
-```sh
-fly deploy -a your-hub \
-  -e PASEO_HUB_APP_URL=https://your-hub.fly.dev
-```
-
-打开该地址并完成浏览器设置，或者在部署前设置[初始化环境变量](#bootstrap-from-environment)。
-
-请保持一台机器持续运行。Hub 维持着 Slack Socket Mode 和 Discord gateway 连接，并把事件派发给 daemon，因此机器停止期间会错过事件。
+使用主机防火墙限制 Hub 的 HTTP 端口，仅公开反向代理。请用 Linux 服务管理器保持 Hub 进程运行；进程停止期间会错过事件。
 
 ## 升级 {#upgrades}
 
-拉取新的镜像或源码并部署。迁移只能向前。请先备份内嵌数据目录或 PostgreSQL 数据库；其中包含账号、应用凭据、配置版本、连接和执行历史。
+更新 npm 包或源码并重启服务。迁移只能向前。请先备份内嵌数据目录或 PostgreSQL 数据库；其中包含账号、应用凭据、配置版本、连接和执行历史。

@@ -1,5 +1,7 @@
 # Mobile panels
 
+This is a shared compact-layout behavior document, retained for browser/desktop responsive layouts and upstream merging. “Mobile” names the shared implementation; this fork does not build or support native iOS/Android apps. Native-only details below describe retained upstream code.
+
 Compact layouts have three mutually exclusive destinations:
 
 - `agent-list` on the left

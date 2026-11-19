@@ -23,7 +23,7 @@ The protocol package owns generation.
 - `packages/protocol/scripts/watch-validation-aot.mjs` reruns generation while editing protocol sources.
 - `packages/protocol/codegen/generated/ws-outbound.compile.ts`, `packages/protocol/src/generated/validation/ws-outbound.aot.ts`, and `packages/protocol/src/generated/validation/ws-outbound-schema-metadata.ts` are generated and gitignored. The metadata module lets generated code reach schema fallback/default values.
 
-Generation runs from protocol-owned lifecycle hooks: `prebuild`, `pretypecheck`, `pretest`, and `watch`. Installs do not run generation: published packages consume protocol from prebuilt `dist`, and local build/typecheck/test flows generate the source file at the point it is actually needed.
+The protocol `build` command generates validators explicitly before TypeScript compilation. Do not move this dependency into `prebuild`: package builds can disable automatic npm lifecycle hooks, and a fresh checkout has no generated files. `pretypecheck`, `pretest`, and `watch` also run generation. Installs do not run generation: published packages consume protocol from prebuilt `dist`.
 
 ## Regression Tests
 

@@ -12,6 +12,12 @@ import {
 import { waitForMetro } from "./dev-runner-readiness.mjs";
 import { resolveDevElectronArgs } from "./dev-runner-args.mjs";
 
+if (process.platform !== "linux") {
+  throw new Error(
+    `Paseo desktop development is only supported on Linux (received ${process.platform}).`,
+  );
+}
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const desktopDir = path.resolve(scriptDir, "..");
 const rootDir = path.resolve(desktopDir, "../..");

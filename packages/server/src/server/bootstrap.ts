@@ -566,7 +566,7 @@ function resolveExpressTrustProxySetting(config: PaseoDaemonConfig): true | stri
 
 function createInitialRelayConfig(config: ResolvedDaemonSettings): MutableDaemonConfig["relay"] {
   return {
-    enabled: config.relayEnabled ?? true,
+    enabled: false,
     requireProtectedSecurity: config.relayRequireProtectedSecurity ?? false,
   };
 }
@@ -625,6 +625,9 @@ export async function createPaseoDaemon(
   rootLogger: Logger,
   dependencies: PaseoDaemonDependencies = {},
 ): Promise<PaseoDaemon> {
+  if (process.platform !== "linux") {
+    throw new Error("The Paseo daemon is supported only on Linux.");
+  }
   configureGitProcessPolicy(config.git ?? resolveGitProcessPolicy({ env: process.env }));
   const logger = rootLogger.child({ module: "bootstrap" });
   const obsoleteTimelineDirectory = path.join(config.paseoHome, "agent-timelines");
@@ -645,7 +648,7 @@ export async function createPaseoDaemon(
   });
   logger.info({ elapsed: elapsed() }, "Speech service created");
   const daemonConfigStore = new DaemonConfigStore(config.paseoHome, initialMutableConfig, logger, {
-    relayEnabledMutable: config.relayEnabledMutable ?? true,
+    relayEnabledMutable: false,
     startupPersisted: config.configReload?.startupPersisted,
     speech: createSpeechSettingsOwner({
       paseoHome: config.paseoHome,
@@ -1799,7 +1802,7 @@ export async function createPaseoDaemon(
             daemonConfigStore.onFieldChange("appendSystemPrompt", (value) => {
               agentManager.setAppendSystemPrompt(typeof value === "string" ? value : "");
             });
-            const relayEnabled = config.relayEnabled ?? true;
+            const relayEnabled = false;
             const relayEndpoint = config.relayEndpoint ?? "relay.paseo.sh:443";
             const relayPublicEndpoint = config.relayPublicEndpoint ?? relayEndpoint;
             const relayUseTls = config.relayUseTls ?? relayEndpoint === "relay.paseo.sh:443";

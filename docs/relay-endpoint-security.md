@@ -1,5 +1,7 @@
 # Relay endpoint security
 
+Retained upstream cryptographic design only. `packages/relay` remains a shared dependency, but relay connection, pairing, deployment, and deployment E2E workflows are disabled in this fork. Settings described below document upstream behavior; they do not enable a supported transport. Use [direct or SSH connections](../public-docs/connectivity.md).
+
 The relay carries daemon sessions between a client and a daemon that cannot reach each other directly. The relay is untrusted, so the two endpoints secure the session themselves. This doc owns the protected construction, its mapping onto Paseo's handshake and record flow, the negotiation rules, and the enforcement flag. The threat model lives in [SECURITY.md](../SECURITY.md); the code is `packages/relay/src/secure-channel.ts`.
 
 Fixes [#359](https://github.com/getpaseo/paseo/issues/359): the legacy construction has no replay protection. A recorded legacy hello plus records replays onto a fresh daemon channel, and duplicated records are delivered twice.
@@ -85,4 +87,3 @@ While a daemon accepts legacy clients, a transcript recorded from any legacy ses
 - `packages/relay/src/protected-records.test.ts`: framing round trips and every malformed-record rule.
 - `packages/relay/src/secure-channel.test.ts`: both modes, mixed versions, policy rejection, retries, recorded-transcript replay, downgrade attempts.
 - `packages/server/src/server/websocket/secure-relay-ingress.test.ts`: daemon admission and the flag.
-- `packages/server/src/server/daemon-e2e/relay-transport.e2e.test.ts`: real daemon through the wrangler relay. Set `PASEO_RELAY_E2E_PORT` to run the same cases against an already-running relay such as the Elixir relay in Docker.

@@ -25,7 +25,7 @@ Both run on a cadence you set. To start an agent from an external event instead 
 
 - **Fresh recurring jobs:** start a clean agent for daily triage, reports, or maintenance.
 - **Heartbeats:** have the current agent periodically reassess state and keep moving.
-- **Build babysitting:** keep one agent checking CI, EAS, Docker, or release builds until they pass.
+- **Build babysitting:** keep one agent checking CI, Linux desktop packages, or npm release builds until they pass.
 - **Daily triage:** scan issues, PRs, and failing checks every morning.
 - **Maintenance sweeps:** refresh dependencies, audit docs, or clean stale branches.
 

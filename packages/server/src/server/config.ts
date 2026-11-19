@@ -314,14 +314,8 @@ function resolveRelayEndpoints(input: ResolveRelayInput): {
 }
 
 function resolveRelayConfig(input: ResolveRelayInput): ResolvedRelay {
-  const environmentEnabled = parseBooleanEnv(input.env.PASEO_RELAY_ENABLED);
-  // COMPAT(relayOptInDefault): daemons whose startup config omitted this field
-  // retain relay-on removal semantics until 2027-01-31. Modern homes use false.
-  const enabled =
-    input.cliRelayEnabled ??
-    environmentEnabled ??
-    input.persisted.daemon?.relay?.enabled ??
-    input.enabledFallback;
+  // Retain relay settings for upstream compatibility, but never enable this transport.
+  const enabled = false;
   const { endpoint, publicEndpoint } = resolveRelayEndpoints(input);
   const useTls =
     input.cliRelayUseTls ??
@@ -337,7 +331,7 @@ function resolveRelayConfig(input: ResolveRelayInput): ResolvedRelay {
   );
   return {
     enabled,
-    enabledMutable: input.cliRelayEnabled === undefined && environmentEnabled === undefined,
+    enabledMutable: false,
     requireProtectedSecurity: input.persisted.daemon?.relay?.requireProtectedSecurity ?? false,
     endpoint,
     publicEndpoint,

@@ -1,11 +1,13 @@
 ---
-title: Open Source Conductor Alternative With Linux, Windows, and Mobile
-description: Paseo is an open source Conductor alternative with Linux, Windows, native mobile apps, a self-hosted daemon, and an extensible client.
+title: Upstream Paseo vs Conductor
+description: Upstream feature comparison; this fork supports Linux desktop, browser, and CLI with direct, SSH, and local-socket connections only.
 nav: Conductor
 order: 50
 ---
 
 # Paseo vs Conductor
+
+> **Upstream comparison:** The content below is retained to describe upstream Paseo, not this fork's distribution. This fork ships Linux desktop, browser, and CLI clients only, with direct, SSH, or local-socket connections. Native mobile apps, app stores, macOS, Windows, Docker, and relay networking are not supported.
 
 Conductor is a proprietary macOS app for running Claude Code, Codex, Cursor, and OpenCode in parallel Git worktrees and managed cloud workspaces.
 

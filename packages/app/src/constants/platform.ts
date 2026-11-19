@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { isElectronRuntime, isElectronRuntimeMac } from "@/desktop/host";
+import { isElectronRuntime } from "@/desktop/host";
 
 // ---------------------------------------------------------------------------
 // Runtime environment constants
@@ -22,8 +22,8 @@ import { isElectronRuntime, isElectronRuntimeMac } from "@/desktop/host";
 /** Browser or Electron — the JS runtime has access to the DOM. */
 export const isWeb = Platform.OS === "web";
 
-/** iOS or Android — the JS runtime is React Native. */
-export const isNative = Platform.OS !== "web";
+/** Native app targets are disabled; retain this gate for shared code. */
+export const isNative = false;
 
 /** Development build/runtime — true in Metro dev bundles, false in production. */
 export const isDev = Boolean((globalThis as { __DEV__?: boolean }).__DEV__);
@@ -34,9 +34,8 @@ export const isDev = Boolean((globalThis as { __DEV__?: boolean }).__DEV__);
 // ---------------------------------------------------------------------------
 
 let _isElectronCached: boolean | null = null;
-let _isElectronMacCached: boolean | null = null;
 
-/** Running inside the Electron desktop wrapper (any OS). */
+/** Running inside the supported Linux Electron desktop wrapper. */
 export function getIsElectron(): boolean {
   if (_isElectronCached === true) return true;
   if (!isWeb) return false;
@@ -45,11 +44,7 @@ export function getIsElectron(): boolean {
   return result;
 }
 
-/** Running inside the Electron desktop wrapper on macOS. */
+/** macOS desktop support is disabled; retain the shared platform API. */
 export function getIsElectronMac(): boolean {
-  if (_isElectronMacCached === true) return true;
-  if (!isWeb) return false;
-  const result = isElectronRuntimeMac();
-  if (result) _isElectronMacCached = true;
-  return result;
+  return false;
 }

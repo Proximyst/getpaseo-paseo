@@ -1,5 +1,11 @@
 # Paseo website
 
+The fork ships Linux desktop downloads only (AppImage, DEB, and RPM), alongside
+the browser client and npm CLI. Download availability requires a Linux AppImage
+in the release; macOS, Windows, and mobile assets are not required or advertised.
+Remote access uses direct connections or SSH, not the upstream relay.
+The retired `/android-version.txt` endpoint returns 404.
+
 ## Plugin install counts
 
 Clients report an install by resolving a plugin with `X-Paseo-Install: 1` or

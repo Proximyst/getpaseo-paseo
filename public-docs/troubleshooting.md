@@ -23,7 +23,7 @@ If it reports `error loading libfuse.so.2`, run without FUSE:
 ./Paseo-x86_64.AppImage --appimage-extract-and-run
 ```
 
-The Paseo window should open. You can also install the `.deb` on Debian/Ubuntu or the `.rpm` on Fedora from the [download page](https://paseo.sh/download).
+The Paseo window should open. You can also install the Linux `.deb` on Debian/Ubuntu or `.rpm` on Fedora from this fork's releases.
 
 ## Paseo can't find my provider
 
@@ -76,13 +76,11 @@ For alternative endpoints, multiple profiles, custom binaries, and ACP agents, s
 
 The same mismatch shows up anywhere Paseo runs your tools, an agent, or a terminal, reporting `command not found` for something you use every day.
 
-When you open the **desktop app** from the Dock or Finder, the OS hands it a stripped-down environment, not your terminal's `PATH`. To compensate, Paseo runs your login shell once at startup (`$SHELL -i -l -c`), captures its environment, and hands that to the daemon and everything it spawns. The rule of thumb: **if a brand-new terminal can run the command, Paseo should too.** That's also the test, open a fresh terminal and try it there.
+When you open the **Linux desktop app** from your application launcher, the OS may hand it a stripped-down environment, not your terminal's `PATH`. To compensate, Paseo runs your login shell once at startup (`$SHELL -i -l -c`), captures its environment, and hands that to the daemon and everything it spawns. The rule of thumb: **if a brand-new terminal can run the command, Paseo should too.** Open a fresh terminal and try it there.
 
 When you start the daemon yourself from a terminal (`paseo`), there's no login-shell step, it simply inherits that terminal's environment.
 
 Either way, the fix for a missing tool lives in your shell config (`.zshrc`, `.zprofile`, …), not in Paseo. Tools installed through version managers (asdf, mise, nvm, …) are the usual offenders, make sure they initialize for a clean login shell, not only inside one you've already opened.
-
-This login-shell step runs on macOS and Linux. On Windows, Paseo uses the environment it was launched with.
 
 ## Reading the logs
 
@@ -93,9 +91,7 @@ Desktop app log location:
 
 | Platform | Path                            |
 | -------- | ------------------------------- |
-| macOS    | `~/Library/Logs/Paseo/main.log` |
 | Linux    | `~/.config/Paseo/logs/main.log` |
-| Windows  | `%APPDATA%\Paseo\logs\main.log` |
 
 ## I changed config.json but nothing happened
 

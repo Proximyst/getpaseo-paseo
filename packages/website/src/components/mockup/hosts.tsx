@@ -58,7 +58,7 @@ interface ConnectedHost {
 
 const CONNECTED_HOSTS: ConnectedHost[] = [
   {
-    name: "MacBook Pro",
+    name: "Linux laptop",
     device: Laptop,
     tone: "text-mock-fg-muted",
     link: "local",
@@ -69,8 +69,8 @@ const CONNECTED_HOSTS: ConnectedHost[] = [
     name: "devbox",
     device: Server,
     tone: HOST_TONE.devbox,
-    link: "relay",
-    endpoint: "relay.paseo.sh",
+    link: "ssh",
+    endpoint: "devbox:22",
     latency: "38ms",
     agents: 6,
   },

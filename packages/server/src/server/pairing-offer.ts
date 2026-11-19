@@ -24,7 +24,7 @@ export async function generateLocalPairingOffer(args: {
   includeQr?: boolean;
   logger?: Logger;
 }): Promise<LocalPairingOffer> {
-  const relayEnabled = args.relayEnabled ?? true;
+  const relayEnabled = false;
   if (!relayEnabled) {
     return {
       relayEnabled: false,

@@ -110,7 +110,7 @@ describe("DaemonConfigStore", () => {
     }
   });
 
-  test("patch persists relay state and emits its field change", async () => {
+  test("rejects live relay enablement without changing saved config or notifying runtime", async () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);
     const store = new DaemonConfigStore(paseoHome, {
@@ -126,10 +126,13 @@ describe("DaemonConfigStore", () => {
     const changes: unknown[] = [];
     store.onFieldChange("relay.enabled", (value) => changes.push(value));
 
-    await store.patch({ relay: { enabled: true } });
-
-    expect(changes).toEqual([true]);
-    expect(loadPersistedConfig(paseoHome).daemon?.relay?.enabled).toBe(true);
+    const before = loadPersistedConfig(paseoHome);
+    await expect(store.patch({ relay: { enabled: true } })).rejects.toThrow(
+      "Relay connections are not supported",
+    );
+    expect(changes).toEqual([]);
+    expect(store.get().relay?.enabled).toBe(false);
+    expect(loadPersistedConfig(paseoHome)).toEqual(before);
   });
 
   test("patch persists the relay protected security requirement independently of relay enablement", async () => {
@@ -157,7 +160,7 @@ describe("DaemonConfigStore", () => {
     await store.patch({ relay: { requireProtectedSecurity: true } });
 
     expect(changes).toEqual([true]);
-    expect(store.get().relay).toEqual({ enabled: true, requireProtectedSecurity: true });
+    expect(store.get().relay).toEqual({ enabled: false, requireProtectedSecurity: true });
     expect(loadPersistedConfig(paseoHome).daemon?.relay?.requireProtectedSecurity).toBe(true);
   });
 
@@ -557,17 +560,17 @@ describe("DaemonConfigStore", () => {
       enableTerminalAgentHooks: false,
       appendSystemPrompt: "",
     });
-    store.onFieldChange("relay.enabled", (enabled) => {
+    store.onFieldChange("browserTools.enabled", (enabled) => {
       if (enabled === true) {
-        throw new Error("Relay transport failed to start");
+        throw new Error("Browser tools failed to start");
       }
     });
 
-    await expect(store.patch({ relay: { enabled: true } })).rejects.toThrow(
-      "Relay transport failed to start",
+    await expect(store.patch({ browserTools: { enabled: true } })).rejects.toThrow(
+      "Browser tools failed to start",
     );
-    expect(store.get().relay?.enabled).toBe(false);
-    expect(loadPersistedConfig(paseoHome).daemon?.relay?.enabled).toBe(false);
+    expect(store.get().browserTools.enabled).toBe(false);
+    expect(loadPersistedConfig(paseoHome).daemon?.browserTools?.enabled).not.toBe(true);
   });
 
   test("rolls back live owners when a later transactional owner fails", async () => {
@@ -622,7 +625,7 @@ describe("DaemonConfigStore", () => {
     );
 
     await expect(store.patch({ relay: { enabled: true } })).rejects.toThrow(
-      "Relay is controlled by a daemon launch override",
+      "Relay connections are not supported",
     );
   });
 
@@ -1359,6 +1362,25 @@ describe("DaemonConfigStore reload", () => {
     writeFileSync(path.join(paseoHome, "config.json"), `${JSON.stringify(config, null, 2)}\n`);
   }
 
+  test("saved relay enablement stays disabled at construction and reload", async () => {
+    const { paseoHome, store, persisted } = createReloadableStore({
+      initialPersisted: { version: 1, daemon: { relay: { enabled: true } } },
+    });
+    expect(store.get().relay?.enabled).toBe(false);
+    const changes: unknown[] = [];
+    store.onFieldChange("relay.enabled", (enabled) => changes.push(enabled));
+    writeConfig(paseoHome, {
+      ...persisted,
+      daemon: { ...persisted.daemon, relay: { enabled: false } },
+    });
+    await store.reload();
+    writeConfig(paseoHome, persisted);
+    const result = await store.reload();
+    expect(result.appliedPaths).not.toContain("daemon.relay.enabled");
+    expect(store.get().relay?.enabled).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
   test("applies overlapping plugin mutations to the latest committed sources", async () => {
     const { store } = createReloadableStore({
       initialPersisted: {
@@ -1490,7 +1512,7 @@ describe("DaemonConfigStore reload", () => {
     });
 
     expect(await store.reload()).toEqual({
-      appliedPaths: ["daemon.relay.enabled"],
+      appliedPaths: [],
       restartRequiredPaths: ["daemon.relay.endpoint", "daemon.relay.useTls"],
       overrideControlledPaths: [],
     });

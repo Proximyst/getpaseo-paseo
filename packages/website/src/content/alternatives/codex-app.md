@@ -1,11 +1,13 @@
 ---
-title: Open Source Codex App Alternative With Native Mobile and Multi-Provider Support
-description: Paseo is an open source Codex alternative that runs on your machines without a required Paseo account, telemetry, or cloud service.
+title: Upstream Paseo vs Codex App
+description: Upstream feature comparison; this fork supports Linux desktop, browser, and CLI with direct, SSH, and local-socket connections only.
 nav: Codex App
 order: 54
 ---
 
 # Paseo vs Codex App
+
+> **Upstream comparison:** The content below is retained to describe upstream Paseo, not this fork's distribution. This fork ships Linux desktop, browser, and CLI clients only, with direct, SSH, or local-socket connections. Native mobile apps, app stores, macOS, Windows, Docker, and relay networking are not supported.
 
 OpenAI provides Codex through the ChatGPT desktop app on macOS, Windows, and Linux, with local, worktree, cloud, and remote workflows.
 

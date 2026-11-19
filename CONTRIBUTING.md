@@ -14,6 +14,12 @@ The core continues to evolve through improvements to the shared experience. Spec
 
 Read the [product philosophy](docs/product.md) for the reasoning behind these choices and how Paseo develops.
 
+## Fork scope
+
+This fork supports Linux desktop, browser/web UI, and CLI, with direct and SSH connections. Contributions must keep Docker, native iOS/Android apps and stores/F-Droid, relay transport, Windows, and macOS disabled. Shared upstream source and behavior/design documents may remain to reduce merge conflicts; they do not add supported targets. Start with [development](docs/development.md), [architecture](docs/architecture.md), and the [upstream merge skill](.agents/skills/merge-upstream/SKILL.md).
+
+The community links and contribution conventions below refer to the upstream project. Do not assume upstream downloads, translations, or historical release notes describe this fork.
+
 ## Build a plugin
 
 Most specialized workflows and integrations are better served by plugins.
@@ -67,7 +73,7 @@ If you choose to submit a PR, these are the basics to cover.
 
 - **Demonstrated demand.** Link a discussion with concrete examples of other users needing the workflow. A feature for a small, specialized use case belongs in a plugin.
 - **Value across workflows.** The feature should improve how existing capabilities work together and benefit a broad set of users. A reusable improvement is more valuable than an isolated control for one task.
-- **A coherent design across platforms and providers.** Shared capabilities should work across platforms and providers wherever applicable. Do not reshape a shared abstraction around one provider while leaving the others unsupported or inconsistent.
+- **A coherent design across supported clients and providers.** Shared capabilities should work across Linux desktop, browser, and CLI wherever applicable. Do not reshape a shared abstraction around one provider while leaving the others unsupported or inconsistent, or re-enable excluded upstream targets.
 - **A finished experience.** Follow the [design guidelines](docs/design.md). The feature must look and feel right in Paseo, including loading states, layout stability, and interaction performance. PRs with janky or rushed interfaces will be closed. Design judgment remains with the maintainer.
 
 ### Keep the scope small

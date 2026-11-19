@@ -15,6 +15,17 @@ import {
 } from "./daemon-client-transport.js";
 
 describe("daemon-client transport helpers", () => {
+  test.each([
+    "wss://relay.test/ws?role=client&serverId=srv_saved&v=2",
+    "relay://relay.test/srv_saved",
+  ])("refuses relay URLs before invoking an injected WebSocket factory (%s)", (url) => {
+    const socketFactory = vi.fn();
+    expect(() => createWebSocketTransportFactory(socketFactory)({ url })).toThrow(
+      "Relay connections are not supported",
+    );
+    expect(socketFactory).not.toHaveBeenCalled();
+  });
+
   test("createEncryptedTransport closes handshake failures with browser-safe code", async () => {
     // An unusable daemon key fails the handshake before any frame is sent.
     const connection: { open: (() => void) | null } = { open: null };

@@ -12,7 +12,7 @@ Everything beyond the [supported providers](/docs/supported-providers) lives und
 
 - **Extend** a first-class provider to point at a different API (Z.AI, Alibaba/Qwen, a proxy, a self-hosted endpoint).
 - **Add profiles**, multiple entries against the same underlying provider with different credentials or curated model lists.
-- **Override the binary**, run a nightly build, a wrapper script, or a Docker image instead of the installed CLI.
+- **Override the binary**, run a nightly build or wrapper script instead of the installed CLI.
 - **Add ACP agents**, Gemini CLI, Hermes, or any agent speaking the Agent Client Protocol over stdio.
 - **Disable** a provider you don't use.
 

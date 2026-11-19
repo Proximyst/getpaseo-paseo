@@ -30,7 +30,7 @@ export interface RelayRuntime {
 
 export function createRelayRuntime(options: RelayRuntimeOptions): RelayRuntime {
   const startTransport = options.startTransport ?? startRelayTransport;
-  let config = options.config;
+  let config = { ...options.config, enabled: false };
   let transport: RelayTransportController | null = null;
 
   function start(): void {
@@ -45,6 +45,7 @@ export function createRelayRuntime(options: RelayRuntimeOptions): RelayRuntime {
   }
 
   function setEnabled(enabled: boolean): void {
+    if (enabled) throw new Error("Relay connections are not supported.");
     if (config.enabled === enabled) return;
     if (enabled) {
       start();

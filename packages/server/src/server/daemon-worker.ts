@@ -8,6 +8,10 @@ import { createRootLogger } from "./logger.js";
 import type { DaemonLifecycleIntent } from "./bootstrap.js";
 import { getProcessDiagnostics } from "./process-diagnostics.js";
 
+if (process.platform !== "linux") {
+  throw new Error(`Paseo daemon is only supported on Linux (received ${process.platform}).`);
+}
+
 process.title = "Paseo Daemon";
 
 type SupervisorLifecycleMessage =
@@ -92,23 +96,6 @@ function applyCliFlagOverrides(config: ReturnType<typeof loadConfig>): void {
       configReload.overrideControlledPaths.push(configPath);
     }
   };
-  if (process.argv.includes("--relay")) {
-    config.relayEnabled = true;
-    config.relayEnabledMutable = false;
-    cli.relayEnabled = true;
-    override("daemon.relay.enabled");
-  }
-  if (process.argv.includes("--no-relay")) {
-    config.relayEnabled = false;
-    config.relayEnabledMutable = false;
-    cli.relayEnabled = false;
-    override("daemon.relay.enabled");
-  }
-  if (process.argv.includes("--relay-use-tls")) {
-    config.relayUseTls = true;
-    cli.relayUseTls = true;
-    override("daemon.relay.useTls");
-  }
   if (process.argv.includes("--no-mcp")) {
     config.mcpEnabled = false;
     cli.mcpEnabled = false;

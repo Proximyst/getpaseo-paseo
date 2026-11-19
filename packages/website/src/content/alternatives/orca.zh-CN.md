@@ -1,11 +1,13 @@
 ---
-title: 面向 Agent 式开发的 Orca 替代品
-description: Paseo 是一个开源的 Agent 式开发环境，提供并行 worktree、编辑器、终端、diff、拉取请求以及内置浏览器。
+title: 上游 Paseo 与 Orca 对比
+description: 上游项目的功能对比；此分支仅支持 Linux 桌面、浏览器和 CLI，以及直连、SSH 和本地套接字。
 nav: Orca
 order: 57
 ---
 
 # Paseo 与 Orca 对比
+
+> **上游对比：** 以下内容保留用于介绍上游 Paseo，而非此分支的发行内容。此分支仅提供 Linux 桌面、浏览器和 CLI 客户端，支持直连、SSH 和本地套接字。不支持原生移动应用、应用商店、macOS、Windows、Docker 或中继网络。
 
 Orca 是一款以 MIT 许可发布的桌面应用，用于在并行的 Git worktree 中运行终端编码 Agent。它包括一个移动伴侣应用、SSH worktree、远程 Orca 服务器、嵌入式浏览器和 CLI。
 

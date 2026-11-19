@@ -1,11 +1,13 @@
 ---
-title: 支持多 Provider 编排的 OpenChamber 替代品
-description: Paseo 是一个 OpenChamber 替代品，适合需要多个 Agent harness、应用插件以及 Apache-2.0 代码库的开发者。
+title: 上游 Paseo 与 OpenChamber 对比
+description: 上游项目的功能对比；此分支仅支持 Linux 桌面、浏览器和 CLI，以及直连、SSH 和本地套接字。
 nav: OpenChamber
 order: 52
 ---
 
 # Paseo 与 OpenChamber 对比
+
+> **上游对比：** 以下内容保留用于介绍上游 Paseo，而非此分支的发行内容。此分支仅提供 Linux 桌面、浏览器和 CLI 客户端，支持直连、SSH 和本地套接字。不支持原生移动应用、应用商店、macOS、Windows、Docker 或中继网络。
 
 OpenChamber 是一个以 MIT 许可发布、围绕 OpenCode 构建的工作区，提供桌面端、Web、VS Code、服务端以及基于 Capacitor 的移动客户端。
 

@@ -1,6 +1,6 @@
 ---
 title: Connectivity
-description: Connect a Paseo client to your daemon through SSH, the relay, or Tailscale.
+description: Connect Linux desktop, browser, and CLI clients directly, through SSH, or over a VPN.
 nav: Connectivity
 order: 4
 category: Getting started
@@ -8,12 +8,12 @@ category: Getting started
 
 # Connectivity
 
-Your Paseo app connects to the daemon running on your computer or server. Paseo Desktop and the CLI can tunnel through SSH. Mobile clients can connect through the Paseo relay or directly with Tailscale.
+Your Paseo client connects to a daemon running on a Linux computer or server. Linux desktop and CLI can tunnel through SSH; browser clients use direct HTTP/WebSocket connections. Relay connections and native mobile apps are not supported in this fork.
 
 This is client-to-daemon transport. If you are looking for the service that starts agents from GitHub, Slack, and Discord events, that is [Hub](/docs/hub).
 
 - [SSH](#ssh)
-- [Paseo relay](#paseo-relay)
+- [Direct connections](#direct-connections)
 - [Tailscale](#tailscale)
 
 ## SSH
@@ -49,31 +49,27 @@ In Paseo Desktop, open **Settings → Add host → Remote SSH** and enter the sa
 
 If the remote daemon has a password, enter it in **Daemon password**; it is stored with the host and sent on every connection, the same as a direct connection's password. SSH login itself stays key-based — Paseo never prompts for an SSH password.
 
-## Paseo relay
+## Direct connections
 
-The relay works without Tailscale, port forwarding, or network configuration. Traffic is end-to-end encrypted.
+On the daemon machine, bind `daemon.listen` to a trusted LAN or VPN address and set a daemon password before exposing it beyond localhost. See [Security](/docs/security) and [Configuration](/docs/configuration#password-authentication).
 
-Relay is disabled until you enable it.
-
-### Enable relay from Paseo Desktop
-
-1. Open **Settings → your host → Pair a device**.
-2. Select **Enable relay**.
-3. Scan the QR code with Paseo on your phone, or copy the pairing link and paste it into the phone app.
-
-### Enable relay from the CLI
-
-Run:
+In the desktop or browser app, open **Settings → Add host → Direct connection**, enter the host, port, and password, then connect. Enable **Use SSL** only when a TLS reverse proxy serves that address. For the CLI:
 
 ```bash
-paseo daemon pair
+paseo --host 192.168.1.10:6767 ls
 ```
 
-Confirm when prompted. Paseo prints a QR code and pairing link. Scan the QR code with Paseo on your phone, or choose **Paste pairing link** in the phone app.
+The browser cannot invoke the local SSH client. To access a loopback-only remote daemon from a browser, forward it yourself:
+
+```bash
+ssh -N -L 6769:127.0.0.1:6767 user@host
+```
+
+Then use `127.0.0.1:6769` locally. If the remote daemon serves the web UI, open `http://127.0.0.1:6769/`.
 
 ## Tailscale
 
-Install [Tailscale](https://tailscale.com/download) on the daemon machine and your phone. Sign in to the same tailnet on both devices.
+Install [Tailscale](https://tailscale.com/download) on the daemon machine and your client machine. Sign in to the same tailnet on both devices.
 
 ### 1. Find the daemon machine's Tailscale IP
 
@@ -101,7 +97,7 @@ Open `~/.paseo/config.json` and set `daemon.listen` to the Tailscale IP:
 
 Keep the other settings already in the file. If it has a `daemon` object, add `listen` inside that object.
 
-To restrict access with a password, see [Password authentication](/docs/configuration#password-authentication).
+Before binding beyond localhost, configure [Password authentication](/docs/configuration#password-authentication).
 
 Restart the daemon:
 
@@ -111,15 +107,14 @@ paseo daemon restart
 
 If Paseo Desktop manages the daemon, use **Settings → your host → Overview → Restart daemon**.
 
-### 3. Connect the phone app
+### 3. Connect the client
 
-1. Connect Tailscale on your phone.
+1. Connect Tailscale on your client machine.
 2. Open Paseo and go to **Settings → Add host → Direct connection**.
-3. Enter the Tailscale IP in **Host**.
-4. Enter `6767` in **Port**.
-5. Leave **Use SSL** off and select **Connect**.
+3. Enter the Tailscale IP in **Host**, `6767` in **Port**, and the daemon password.
+4. Leave **Use SSL** off for this direct VPN address and select **Connect**.
 
-If the host was already paired through the relay, Paseo adds the direct connection to the same host.
+For the CLI, use `paseo --host 100.101.102.103:6767 ls`. For the browser, you can also enable the daemon's [bundled web UI](/docs/web-ui).
 
 ## Troubleshooting
 

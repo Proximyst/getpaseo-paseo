@@ -1,3 +1,7 @@
+if (process.platform !== "linux") {
+  throw new Error(`Paseo desktop is only supported on Linux (received ${process.platform}).`);
+}
+
 import { protectConsoleStreams } from "./diagnostics/console-streams.js";
 protectConsoleStreams();
 

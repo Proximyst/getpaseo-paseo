@@ -14,8 +14,6 @@ export interface GitHubRelease {
 export interface ReleaseInfo {
   version: string;
   linuxAppImageAsset: string;
-  windowsX64Asset: string | null;
-  windowsArm64Asset: string | null;
 }
 
 export interface ReleaseChannels {
@@ -27,35 +25,16 @@ export interface ReleaseChannels {
 const LINUX_APPIMAGE_ASSET_PATTERN =
   /^Paseo-(?:\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)-)?x86_64\.AppImage$/;
 
-const REQUIRED_ASSET_PATTERNS = [
-  /Paseo-.*-arm64\.dmg$/,
-  LINUX_APPIMAGE_ASSET_PATTERN,
-  /Paseo-Setup-.*\.exe$/,
-];
+const REQUIRED_ASSET_PATTERNS = [LINUX_APPIMAGE_ASSET_PATTERN];
 
 const GITHUB_RELEASES_URL = "https://api.github.com/repos/getpaseo/paseo/releases?per_page=10";
-const RELEASE_CACHE_KEY = "github-release:v2";
+const RELEASE_CACHE_KEY = "github-release:v3";
 const ANDROID_RELEASE_CACHE_KEY = "github-android-release:v1";
 
 function hasRequiredAssets(release: GitHubRelease): boolean {
   return REQUIRED_ASSET_PATTERNS.every((pattern) =>
     release.assets.some((asset) => pattern.test(asset.name)),
   );
-}
-
-function pickWindowsAssets(assets: GitHubAsset[]) {
-  const x64Suffixed = assets.find((asset) => /Paseo-Setup-.*-x64\.exe$/.test(asset.name));
-  const arm64 = assets.find((asset) => /Paseo-Setup-.*-arm64\.exe$/.test(asset.name));
-  const legacy = assets.find(
-    (asset) =>
-      /Paseo-Setup-.*\.exe$/.test(asset.name) &&
-      !asset.name.endsWith("-x64.exe") &&
-      !asset.name.endsWith("-arm64.exe"),
-  );
-  return {
-    x64: (x64Suffixed ?? legacy)?.name ?? null,
-    arm64: arm64?.name ?? null,
-  };
 }
 
 function pickLinuxAppImageAsset(assets: GitHubAsset[]) {
@@ -89,12 +68,9 @@ function toReleaseInfo(release: GitHubRelease): ReleaseInfo | null {
   const linuxAppImageAsset = pickLinuxAppImageAsset(release.assets);
   if (!linuxAppImageAsset) return null;
 
-  const windowsAssets = pickWindowsAssets(release.assets);
   return {
     version: versionFromTag(release.tag_name),
     linuxAppImageAsset,
-    windowsX64Asset: windowsAssets.x64,
-    windowsArm64Asset: windowsAssets.arm64,
   };
 }
 
@@ -168,16 +144,6 @@ function isReleaseInfo(value: unknown): value is ReleaseInfo {
     (record.linuxAppImageAsset === "Paseo-x86_64.AppImage" ||
       new RegExp(`^Paseo-${record.version.replaceAll(".", "\\.")}-x86_64\\.AppImage$`).test(
         record.linuxAppImageAsset,
-      )) &&
-    (typeof record.windowsX64Asset === "string" || record.windowsX64Asset === null) &&
-    (typeof record.windowsArm64Asset === "string" || record.windowsArm64Asset === null) &&
-    (record.windowsX64Asset === null ||
-      new RegExp(`^Paseo-Setup-${record.version.replaceAll(".", "\\.")}(?:-x64)?\\.exe$`).test(
-        record.windowsX64Asset,
-      )) &&
-    (record.windowsArm64Asset === null ||
-      new RegExp(`^Paseo-Setup-${record.version.replaceAll(".", "\\.")}-arm64\\.exe$`).test(
-        record.windowsArm64Asset,
       ))
   );
 }

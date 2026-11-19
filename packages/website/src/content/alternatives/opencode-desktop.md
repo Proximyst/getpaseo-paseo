@@ -1,11 +1,13 @@
 ---
-title: OpenCode Desktop Alternative With Native Mobile and Multi-Provider Orchestration
-description: Paseo is an OpenCode Desktop alternative for developers who want native mobile apps, a self-hosted daemon, and OpenCode alongside Claude Code, Codex, Copilot, and more.
+title: Upstream Paseo vs OpenCode Desktop
+description: Upstream feature comparison; this fork supports Linux desktop, browser, and CLI with direct, SSH, and local-socket connections only.
 nav: OpenCode Desktop
 order: 56
 ---
 
 # Paseo vs OpenCode Desktop
+
+> **Upstream comparison:** The content below is retained to describe upstream Paseo, not this fork's distribution. This fork ships Linux desktop, browser, and CLI clients only, with direct, SSH, or local-socket connections. Native mobile apps, app stores, macOS, Windows, Docker, and relay networking are not supported.
 
 OpenCode Desktop is the desktop app for OpenCode. It is available in beta for macOS, Windows, and Linux.
 

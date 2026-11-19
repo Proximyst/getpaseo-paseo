@@ -59,11 +59,11 @@ jobs:
           set -euo pipefail
           mkdir release-manifests
           cd release-manifests
-          gh release download "$RELEASE_TAG" --repo "${{ github.repository }}" --pattern "${RELEASE_CHANNEL}*.yml"
+          gh release download "$RELEASE_TAG" --repo "${{ github.repository }}" --pattern "${RELEASE_CHANNEL}-linux.yml"
           shopt -s nullglob
           files=( ./*.yml )
           if (( ${#files[@]} == 0 )); then
-            echo "::error::No manifests matched ${RELEASE_CHANNEL}*.yml on $RELEASE_TAG"
+            echo "::error::No Linux manifest found on $RELEASE_TAG"
             exit 1
           fi
           echo "Downloaded ${#files[@]} manifest(s):"

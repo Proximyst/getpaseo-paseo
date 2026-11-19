@@ -1,11 +1,13 @@
 ---
-title: Open Source Superset Alternative With Native Mobile
-description: Paseo is an Apache-2.0 Superset alternative that runs locally without an account and supports application plugins across its server and clients.
+title: Upstream Paseo vs Superset
+description: Upstream feature comparison; this fork supports Linux desktop, browser, and CLI with direct, SSH, and local-socket connections only.
 nav: Superset
 order: 51
 ---
 
 # Paseo vs Superset
+
+> **Upstream comparison:** The content below is retained to describe upstream Paseo, not this fork's distribution. This fork ships Linux desktop, browser, and CLI clients only, with direct, SSH, or local-socket connections. Native mobile apps, app stores, macOS, Windows, Docker, and relay networking are not supported.
 
 Superset is a source-available desktop workspace for running CLI coding agents in parallel Git worktrees. It includes a CLI, SDK, MCP server, and remote hosts.
 

@@ -1,11 +1,9 @@
 import { handlePluginRegistryRequest } from "~/plugins/published";
 import type { Register } from "@tanstack/react-router";
 import type { RequestHandler } from "@tanstack/react-start/server";
-import { getAndroidVersionCode } from "~/android-version";
 import { getCanonicalRedirect } from "~/canonical-url";
 import { getLegacyDocsRedirect, resolveDocMarkdownPath } from "~/docs";
 import { splitLocalePath, withLocalePrefix } from "~/i18n";
-import { getLatestAndroidVersion } from "~/latest-release";
 import { buildLlmsTxt } from "~/llms";
 
 interface WebsiteEnv {
@@ -17,15 +15,6 @@ function markdownResponse(body: string): Response {
   return new Response(body, {
     headers: {
       "content-type": "text/markdown; charset=utf-8",
-      "cache-control": "public, max-age=300, s-maxage=300",
-    },
-  });
-}
-
-function plainTextResponse(body: string): Response {
-  return new Response(body, {
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
       "cache-control": "public, max-age=300, s-maxage=300",
     },
   });
@@ -108,11 +97,7 @@ export default {
     }
 
     if (url.pathname === "/android-version.txt") {
-      const version = await getLatestAndroidVersion({
-        cache: env.WEBSITE_CACHE ?? null,
-        waitUntil: (promise) => context.waitUntil(promise),
-      });
-      return plainTextResponse(`${getAndroidVersionCode(version)}\n`);
+      return new Response("Not found", { status: 404 });
     }
 
     const markdown = resolveDocMarkdownPath(url.pathname);
