@@ -118,14 +118,14 @@ function ChangesPanel({ selectedFile }: { selectedFile?: string }) {
 
 const CHECKS: { name: string; context: string; time: string }[] = [
   { name: "changes", context: "CI", time: "11s" },
-  { name: "setup", context: "Docker", time: "5s" },
-  { name: "build", context: "Docker", time: "16m 18s" },
+  { name: "setup", context: "CI", time: "5s" },
+  { name: "build", context: "CI", time: "16m 18s" },
   { name: "format", context: "CI", time: "1m 23s" },
-  { name: "build-desktop-darwin", context: "Nix", time: "6m 40s" },
+  { name: "build-desktop-linux", context: "CI", time: "6m 40s" },
   { name: "lint", context: "CI", time: "1m 43s" },
   { name: "typecheck", context: "CI", time: "2m 19s" },
   { name: "server-tests (ubuntu-latest)", context: "CI", time: "7m 15s" },
-  { name: "app-tests (macos)", context: "CI", time: "5m 02s" },
+  { name: "app-tests (linux)", context: "CI", time: "5m 02s" },
 ];
 
 function CheckGlyph() {
@@ -267,7 +267,7 @@ function FailingCheck() {
         <CircleX size={15} className="shrink-0 text-mock-tile-red" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[12px] leading-[16px] text-mock-fg">
-            app-tests (macos)
+            app-tests (linux)
           </span>
           <span className="block truncate text-[10.5px] leading-[13px] text-mock-fg-muted">
             #3976 · Honor configured commit signing

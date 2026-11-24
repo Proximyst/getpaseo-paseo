@@ -46,10 +46,12 @@ desktop:
   - "packages/app/e2e/support/**"
   - "packages/app/*config.{cjs,js,ts}"
   - "packages/app/package.json"
+  - "packages/react-native-enriched-markdown/**"
 
 app:
   - "packages/app/**"
   - "packages/expo-two-way-audio/**"
+  - "packages/react-native-enriched-markdown/**"
 
 sdk:
   - "packages/plugin/**"
@@ -80,6 +82,7 @@ browser:
   - "packages/app/index.ts"
   - "packages/app/*config.{cjs,js,ts}"
   - "packages/app/package.json"
+  - "packages/react-native-enriched-markdown/**"
 
 relay:
   - "packages/relay/**"

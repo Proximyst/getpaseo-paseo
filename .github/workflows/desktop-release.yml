@@ -241,6 +241,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p release-manifests
           cd release-manifests
           manifests_dir="$PWD/final"
           mkdir -p "$manifests_dir"

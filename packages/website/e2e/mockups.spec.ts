@@ -38,7 +38,7 @@ const HERO_SCENES = [
   { pill: "Remote", shows: "Tailscale" },
   { pill: "Code review", shows: "Feedback sent to Codex" },
   { pill: "Pull requests", shows: "https://github.com/getpaseo/paseo/pull/3981" },
-  { pill: "Plugins", shows: "app-tests (macos)" },
+  { pill: "Plugins", shows: "app-tests (linux)" },
 ];
 
 /** Clicks a hero pill until its scene starts. A click before hydration selects nothing. */
@@ -72,16 +72,21 @@ test("the hero opens on orchestration across providers and machines", async ({ p
     await expect(mockup.getByText(agent, { exact: true })).toBeVisible();
   }
   // The task on another machine carries that host's badge in its tool call and its subagent row.
-  for (const remoteTask of ["OpenCode · fix/menu-bar-icon", "OpenCode · Kimi K3"]) {
+  for (const remoteTask of ["OpenCode · fix/linux-tray-icon", "OpenCode · Kimi K3"]) {
     const row = mockup.getByText(remoteTask, { exact: true }).locator("xpath=..");
-    await expect(row.getByText("mac-mini", { exact: true })).toBeVisible();
+    await expect(row.getByText("linux-mini", { exact: true })).toBeVisible();
   }
 });
 
 test("the orchestration scene plays from an empty chat to the open roster of subagents", async ({
   page,
 }) => {
+  // The scene clock moves at most 64ms per animation frame. Headless WebKit on a busy CI runner
+  // paints a few frames a second, so on the real clock the scene plays in slow motion and misses
+  // any wall-clock timeout. The test holds the page clock and plays the scene itself.
+  await page.clock.install();
   await openHomepage(page);
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   const mockup = page.getByRole("img", { name: desktopName, exact: true });
   const composer = mockup.getByText("Message the agent, tag @files, or use /commands and /skills");
   await playScene(page, "Orchestration", composer);
@@ -89,20 +94,19 @@ test("the orchestration scene plays from an empty chat to the open roster of sub
   await expect(mockup.getByText("3 subagents", { exact: true })).toHaveCount(0);
 
   // The orchestrator lists the issues and the agent profiles, launches three agents and says so,
-  // then the pointer clicks the pill and the roster opens.
-  await expect(mockup.getByText("3 subagents", { exact: true })).toBeVisible({ timeout: 20_000 });
+  // then the pointer clicks the pill and the roster opens. Ten seconds outlasts the scene.
+  await page.clock.runFor(10_000);
+  await expect(mockup.getByText("3 subagents", { exact: true })).toBeVisible();
   await expect(mockup.getByText("gh issue list --label ready", { exact: true })).toBeVisible();
   await expect(mockup.getByText("List agent profiles", { exact: true })).toBeVisible();
   await expect(
-    mockup.getByText(
-      "I will launch the UI agent on your mac-mini, because that issue is specific to macOS.",
-    ),
+    mockup.getByText("I will launch the UI agent on linux-mini, where it can test the tray icon."),
   ).toBeVisible();
   await expect(mockup.getByText("Create agent", { exact: true })).toHaveCount(3);
   await expect(
     mockup.getByText("All three are launched. Paseo will notify me when each one finishes."),
   ).toBeVisible();
-  await expect(mockup.getByText("Pi · GLM-5.2", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(mockup.getByText("Pi · GLM-5.2", { exact: true })).toBeVisible();
 });
 
 test("the opening scene waits until most of the mockup is on screen", async ({ page }) => {
@@ -120,7 +124,7 @@ test("the opening scene waits until most of the mockup is on screen", async ({ p
 });
 
 test("the opening scene starts in a window shorter than most of the mockup", async ({ page }) => {
-  await openHomepage(page, { width: 1400, height: 400 });
+  await openHomepage(page, { width: 1400, height: 320 });
   const mockup = page.getByRole("img", { name: desktopName, exact: true });
   const request = mockup.getByText("Fix the issues labeled ready, one worktree each.");
   await mockup.scrollIntoViewIfNeeded();
@@ -133,7 +137,7 @@ test("the plugins scene installs the panel, then changes it on request", async (
   const mockup = page.getByRole("img", { name: desktopName, exact: true });
   const changesPanel = mockup.getByText("Uncommitted", { exact: true });
   const pluginPanel = mockup.getByText("Recently merged", { exact: true });
-  const failingCheck = mockup.getByText("app-tests (macos)", { exact: true });
+  const failingCheck = mockup.getByText("app-tests (linux)", { exact: true });
   await playScene(page, "Plugins", page.getByRole("button", { name: "Plugins", pressed: true }));
   await expect(changesPanel).toBeVisible();
   await expect(pluginPanel).toHaveCount(0);

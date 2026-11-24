@@ -61,8 +61,21 @@ if (args.print) {
   process.exit(0);
 }
 
-execFileSync(
-  "npm",
-  ["version", nextVersion, "--include-workspace-root", "--message", "chore(release): cut %s"],
-  { cwd: rootDir, stdio: "inherit" },
-);
+const dirty = execFileSync("git", ["status", "--porcelain"], {
+  cwd: rootDir,
+  encoding: "utf8",
+}).trim();
+if (dirty) {
+  throw new Error("Git working directory not clean. Commit or stash changes before bumping.");
+}
+
+// Prepare the commit for release-branch CI without creating a tag.
+// After verification, release:push tags the already-pushed commit.
+execFileSync("npm", ["version", nextVersion, "--include-workspace-root", "--no-git-tag-version"], {
+  cwd: rootDir,
+  stdio: "inherit",
+});
+execFileSync("git", ["commit", "-m", `chore(release): cut ${nextVersion}`], {
+  cwd: rootDir,
+  stdio: "inherit",
+});

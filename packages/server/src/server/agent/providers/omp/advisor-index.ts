@@ -7,7 +7,7 @@ import { normalizeProviderReplayTimestamp } from "../../provider-history-timesta
 import { isOmpAdvisorSessionFile } from "./advisor-session.js";
 import { OMP_HISTORY_MAPPER_HOOKS } from "./history-hooks.js";
 import { OmpHistoryMapper } from "./message-history.js";
-import { OmpAgentMessageSchema } from "./rpc-types.js";
+import { OmpAgentMessageSchema, type OmpAgentMessage } from "./rpc-types.js";
 
 interface AdvisorEntry {
   id?: string;
@@ -17,6 +17,12 @@ interface AdvisorEntry {
 }
 
 type ReadEntries = (file: string) => Promise<AdvisorEntry[]>;
+
+interface AdvisorMessage {
+  id: string;
+  entry: AdvisorEntry;
+  message: OmpAgentMessage;
+}
 
 interface AdvisorTranscriptState {
   size: number;
@@ -89,7 +95,7 @@ export class OmpAdvisorIndex {
           continue;
         }
         const entries = await readEntries(file);
-        const messages = entries.flatMap((entry) => {
+        const messages = entries.flatMap<AdvisorMessage>((entry) => {
           if (entry.type !== "message" || !entry.id) return [];
           const parsed = OmpAgentMessageSchema.safeParse(entry.message);
           return parsed.success ? [{ id: entry.id, entry, message: parsed.data }] : [];
@@ -104,62 +110,10 @@ export class OmpAdvisorIndex {
                 mapper: new OmpHistoryMapper("omp", [], OMP_HISTORY_MAPPER_HOOKS),
               }
             : previous;
-        const slug =
-          dirent.name === "__advisor.jsonl"
-            ? ""
-            : dirent.name.slice("__advisor.".length, -".jsonl".length);
         // A separate namespace cannot collide with OMP task ids, including nested advisors.
         const id = `omp-advisor:${file}`;
-        const assistant = messages.findLast(({ message }) => message.role === "assistant")?.message;
-        let model: string | null = null;
-        // This is the last saved outcome, not a claim that the live runtime has stopped.
-        let status: ProviderSubagentStatus = "completed";
-        if (assistant?.role === "assistant") {
-          if (assistant.model) {
-            model = [assistant.provider, assistant.model].filter(Boolean).join("/");
-          }
-          if (assistant.stopReason === "aborted") {
-            status = "canceled";
-          } else if (assistant.stopReason === "error" || assistant.errorMessage) {
-            status = "failed";
-          }
-        }
-        const timestamp = normalizeProviderReplayTimestamp(messages.at(-1)?.entry.timestamp);
-        events.push({
-          type: "provider_subagent",
-          provider: "omp",
-          event: {
-            type: "upsert",
-            id,
-            title: slug ? `Advisor · ${slug}` : "Advisor",
-            subtitle: [model, "Saved transcript · runtime status unavailable"]
-              .filter(Boolean)
-              .join(" · "),
-            description: slug ? `Advisor · ${slug}` : "Advisor",
-            status,
-            toolCallId: null,
-            parentSubagentId,
-            ...(timestamp ? { timestamp } : {}),
-          },
-        });
-        for (const { id: entryId, entry, message } of messages) {
-          if (state.seen.has(entryId)) continue;
-          state.seen.add(entryId);
-          const timestamp = normalizeProviderReplayTimestamp(entry.timestamp);
-          for (const mapped of state.mapper.mapMessages([message])) {
-            if (mapped.type !== "timeline") continue;
-            events.push({
-              type: "provider_subagent",
-              provider: "omp",
-              event: {
-                type: "timeline",
-                id,
-                item: mapped.item,
-                ...(timestamp ? { timestamp } : {}),
-              },
-            });
-          }
-        }
+        events.push(advisorUpsert(id, dirent.name, messages, parentSubagentId));
+        appendAdvisorTimeline(events, id, messages, state);
         state.size = snapshot.size;
         state.mtimeMs = snapshot.mtimeMs;
         this.transcripts.set(file, state);
@@ -170,5 +124,73 @@ export class OmpAdvisorIndex {
       }
     }
     return result;
+  }
+}
+
+function advisorUpsert(
+  id: string,
+  name: string,
+  messages: readonly AdvisorMessage[],
+  parentSubagentId: string | null,
+): AgentStreamEvent {
+  const slug = name === "__advisor.jsonl" ? "" : name.slice("__advisor.".length, -".jsonl".length);
+  const title = slug ? `Advisor · ${slug}` : "Advisor";
+  const assistant = messages.findLast(({ message }) => message.role === "assistant")?.message;
+  let model: string | null = null;
+  // This is the last saved outcome, not a claim that the live runtime has stopped.
+  let status: ProviderSubagentStatus = "completed";
+  if (assistant?.role === "assistant") {
+    if (assistant.model) {
+      model = [assistant.provider, assistant.model].filter(Boolean).join("/");
+    }
+    if (assistant.stopReason === "aborted") {
+      status = "canceled";
+    } else if (assistant.stopReason === "error" || assistant.errorMessage) {
+      status = "failed";
+    }
+  }
+  const timestamp = normalizeProviderReplayTimestamp(messages.at(-1)?.entry.timestamp);
+  return {
+    type: "provider_subagent",
+    provider: "omp",
+    event: {
+      type: "upsert",
+      id,
+      title,
+      subtitle: [model, "Saved transcript · runtime status unavailable"]
+        .filter(Boolean)
+        .join(" · "),
+      description: title,
+      status,
+      toolCallId: null,
+      parentSubagentId,
+      ...(timestamp ? { timestamp } : {}),
+    },
+  };
+}
+
+function appendAdvisorTimeline(
+  events: AgentStreamEvent[],
+  id: string,
+  messages: readonly AdvisorMessage[],
+  state: AdvisorTranscriptState,
+): void {
+  for (const { id: entryId, entry, message } of messages) {
+    if (state.seen.has(entryId)) continue;
+    state.seen.add(entryId);
+    const timestamp = normalizeProviderReplayTimestamp(entry.timestamp);
+    for (const mapped of state.mapper.mapMessages([message])) {
+      if (mapped.type !== "timeline") continue;
+      events.push({
+        type: "provider_subagent",
+        provider: "omp",
+        event: {
+          type: "timeline",
+          id,
+          item: mapped.item,
+          ...(timestamp ? { timestamp } : {}),
+        },
+      });
+    }
   }
 }

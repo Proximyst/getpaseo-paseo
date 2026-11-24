@@ -39,7 +39,7 @@ Distribution: Linux desktop app; web app; npm CLI. Source: Apache-2.0 at https:/
       {
         path: "/changelog",
         title: "Changelog",
-        description: "Release notes for the Paseo daemon, CLI, desktop, and mobile apps.",
+        description: "Paseo release notes.",
       },
       {
         path: "/download",
@@ -50,7 +50,7 @@ Distribution: Linux desktop app; web app; npm CLI. Source: Apache-2.0 at https:/
         path: "/hub",
         title: "Paseo Hub",
         description:
-          "Connect daemons and run GitHub, Slack, Discord, and Linear workflows through the hosted service or your own deployment.",
+          "Connect daemons and automate agents from GitHub, Linear, Slack, Discord, schedules, and webhooks through the hosted service or your own deployment.",
       },
       {
         path: "/blog",
@@ -61,7 +61,7 @@ Distribution: Linux desktop app; web app; npm CLI. Source: Apache-2.0 at https:/
       {
         path: "/terms",
         title: "Terms",
-        description: "Terms for the official relay and hosted Hub.",
+        description: "Terms of service for upstream Paseo services, including hosted Hub.",
       },
       {
         path: "https://github.com/getpaseo/paseo",
@@ -93,7 +93,7 @@ Paseo 支持 Claude Code、Codex、GitHub Copilot、OpenCode、Pi、Antigravity�
       {
         path: "/changelog",
         title: "更新日志",
-        description: "Paseo daemon、CLI、桌面和移动应用的发布说明。",
+        description: "Paseo 发布说明。",
       },
       {
         path: "/download",
@@ -104,11 +104,11 @@ Paseo 支持 Claude Code、Codex、GitHub Copilot、OpenCode、Pi、Antigravity�
         path: "/hub",
         title: "Paseo Hub",
         description:
-          "连接 daemon，通过托管服务或你自己的部署运行 GitHub、Slack、Discord 和 Linear 工作流。",
+          "连接 daemon，通过托管服务或你自己的部署，使用 GitHub、Linear、Slack、Discord、定时任务和 webhook 自动化运行 Agent。",
       },
       { path: "/blog", title: "博客", description: "Paseo 团队的动态和技术文章。" },
       { path: "/privacy", title: "隐私", description: "隐私政策。" },
-      { path: "/terms", title: "条款", description: "官方中继和托管 Hub 的条款。" },
+      { path: "/terms", title: "条款", description: "托管 Hub 等上游 Paseo 服务的条款。" },
       {
         path: "https://github.com/getpaseo/paseo",
         title: "GitHub",

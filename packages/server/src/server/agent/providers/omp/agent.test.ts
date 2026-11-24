@@ -1,6 +1,6 @@
 import { describe, expect, onTestFinished, test } from "vitest";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -1868,7 +1868,6 @@ test.each([false, true])(
     else {
       const imagePath = prompt.message.match(/\[Image available at: (.+)\]/)?.[1];
       expect(imagePath).toBeTruthy();
-      const { readFile, rm } = await import("node:fs/promises");
       expect(await readFile(imagePath!)).toEqual(bytes);
       await rm(imagePath!);
     }

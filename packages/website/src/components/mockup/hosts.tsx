@@ -1,4 +1,4 @@
-import { Computer, Globe, Laptop, Monitor, PcCase, Plus, Server, Terminal, X } from "lucide-react";
+import { Computer, Laptop, Monitor, PcCase, Plus, Server, Terminal, X } from "lucide-react";
 import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { TailscaleMark } from "./icons";
@@ -8,12 +8,12 @@ import { TailscaleMark } from "./icons";
  * its color is the identity color they picked for its badge. The local machine draws no badge, as
  * a host set to hide its badge does in the app.
  */
-export type RemoteHostId = "devbox" | "mac-mini";
+export type RemoteHostId = "devbox" | "linux-mini";
 
 /** Badge ink per host, as the app's `HostBadge` paints glyph and label in one identity color. */
 const HOST_TONE: Record<RemoteHostId, string> = {
   devbox: "text-mock-host-teal",
-  "mac-mini": "text-mock-host-violet",
+  "linux-mini": "text-mock-host-violet",
 };
 
 /**
@@ -35,11 +35,10 @@ export function HostBadge({ host, glyph = 12 }: { host: RemoteHostId; glyph?: nu
 type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
 
 /** How the app reaches a host. Tailscale is a direct TCP connection to a tailnet name. */
-type HostLink = "local" | "relay" | "tailscale" | "ssh";
+type HostLink = "local" | "tailscale" | "ssh";
 
 const LINK_ICON: Record<HostLink, IconComponent> = {
   local: Monitor,
-  relay: Globe,
   tailscale: TailscaleMark,
   ssh: Terminal,
 };
@@ -75,11 +74,11 @@ const CONNECTED_HOSTS: ConnectedHost[] = [
     agents: 6,
   },
   {
-    name: "mac-mini",
+    name: "linux-mini",
     device: Computer,
-    tone: HOST_TONE["mac-mini"],
+    tone: HOST_TONE["linux-mini"],
     link: "tailscale",
-    endpoint: "mac-mini:6767",
+    endpoint: "linux-mini:6767",
     latency: "12ms",
     agents: 3,
   },

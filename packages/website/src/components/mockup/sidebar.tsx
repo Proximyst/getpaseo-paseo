@@ -67,9 +67,9 @@ const PINNED_ROWS: WorkspaceRow[] = [
 const WORKING_ROWS: WorkspaceRow[] = [
   {
     id: "safe-area",
-    title: "Fix commit safe area in emulators",
+    title: "Fix commit panel at narrow widths",
     avatar: PASEO,
-    host: "mac-mini",
+    host: "linux-mini",
     time: "4m",
     running: true,
   },
@@ -136,7 +136,7 @@ const DONE_ROWS: WorkspaceRow[] = [
     id: "modules",
     title: "Plan modules and abstractions",
     avatar: PASEO,
-    host: "mac-mini",
+    host: "linux-mini",
     pr: "3884",
     passed: true,
     time: "1d",

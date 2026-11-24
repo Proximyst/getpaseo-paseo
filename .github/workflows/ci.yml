@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   # Every base branch, so stacked PRs and PRs into any base get the same checks.
   pull_request:
   merge_group:
@@ -20,6 +20,8 @@ env:
   # CI does not use the CUDA execution provider, and the onnxruntime-node
   # postinstall download from NuGet is large enough to make npm ci flaky.
   ONNXRUNTIME_NODE_INSTALL: skip
+  NPM_CONFIG_AUDIT: "false"
+  NPM_CONFIG_FUND: "false"
 
 jobs:
   changes:
@@ -56,7 +58,15 @@ jobs:
           filters: .github/ci-paths.yml
 
       - name: Validate CI contracts
-        run: node --test scripts/changelog-utils.test.mjs scripts/sync-release-notes-from-changelog.test.mjs scripts/upload-release-assets.test.mjs
+        run: >-
+          node --test
+          scripts/changelog-utils.test.mjs
+          scripts/release-version-utils.test.mjs
+          scripts/publish-release-packages.test.mjs
+          scripts/push-current-release-tag.test.mjs
+          scripts/reconcile-release.test.mjs
+          scripts/sync-release-notes-from-changelog.test.mjs
+          scripts/upload-release-assets.test.mjs
 
   quality:
     name: quality
@@ -165,8 +175,29 @@ jobs:
       - name: Run website tests
         run: npx vitest run packages/website/src --bail=1
 
+      # WebKit needs about 180 system packages (125 MB) from the Ubuntu mirror. The mirror
+      # sometimes serves them at under 100 kB/s, which turns a 1-minute step into 25 minutes.
+      # Keep the downloaded .deb files in the Actions cache so apt installs them without the mirror.
+      - name: Restore website browser system packages
+        uses: actions/cache@v4
+        with:
+          path: ~/website-browser-debs
+          key: website-browser-debs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: website-browser-debs-${{ runner.os }}-
+
       - name: Install website test browsers
-        run: npx playwright install --with-deps chromium webkit
+        run: |
+          mkdir -p ~/website-browser-debs
+          shopt -s nullglob
+          cached_debs=(~/website-browser-debs/*.deb)
+          if (( ${#cached_debs[@]} > 0 )); then
+            sudo cp "${cached_debs[@]}" /var/cache/apt/archives/
+          fi
+          npx playwright install --with-deps chromium webkit
+          archive_debs=(/var/cache/apt/archives/*.deb)
+          if (( ${#archive_debs[@]} > 0 )); then
+            cp "${archive_debs[@]}" ~/website-browser-debs/
+          fi
 
       - name: Verify website mockups
         run: npm run test:e2e --workspace=@getpaseo/website
@@ -183,55 +214,46 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' || needs.changes.outputs.hub != 'false') }}
     runs-on: ubuntu-latest
     steps:
-      - &server_capacity
-        name: Log runner capacity
+      - name: Log runner capacity
         run: |
           node -e "const os = require('node:os'); console.log(JSON.stringify({cpus: os.cpus().length, model: os.cpus()[0].model, ramGiB: os.totalmem() / 2 ** 30}))"
 
-      - &server_checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - &server_node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
 
-      - &server_fetch
-        name: Fetch origin/main (worktree tests)
+      - name: Fetch origin/main (worktree tests)
         if: ${{ needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' }}
         run: git fetch --no-tags origin main:refs/remotes/origin/main
 
-      - &server_install
-        name: Install dependencies
+      - name: Install dependencies
         run: node scripts/npm-retry.mjs ci
 
-      - &server_agent_clis
-        name: Install agent CLIs for provider tests
+      - name: Install agent CLIs for provider tests
         if: ${{ needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' }}
         run: node scripts/npm-retry.mjs install -g @anthropic-ai/claude-code opencode-ai
 
-      - &server_build
-        name: Build server dependencies
+      - name: Build server dependencies
         run: npm run build:server-deps
 
       - name: Run server tests
         if: ${{ needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' }}
         run: npm run test --workspace=@getpaseo/server
-        env: &server_test_env
+        env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-      - &server_plugin_tests
-        name: Run built-in plugin tests
+      - name: Run built-in plugin tests
         if: ${{ needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' }}
         run: npm run test --workspace=@getpaseo/builtin-plugins
 
-      - &server_hub_contract
-        name: Run Hub CLI/daemon contract
+      - name: Run Hub CLI/daemon contract
         if: ${{ needs.changes.outputs.full == 'false' && needs.changes.outputs.server == 'false' && needs.changes.outputs.hub != 'false' }}
         run: npm run test:hub-cli-contract --workspace=@getpaseo/server
 
@@ -243,7 +265,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-    steps: &desktop_test_steps
+    steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -370,9 +392,9 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           E2E_WORKERS: "2"
           # File groups are weighted by observed reporter durations.
-          # Share of the test list per shard, rebalanced from the Playwright step
-          # minutes of five eight-shard runs so the slowest and fastest shards meet.
-          PWTEST_SHARD_WEIGHTS: "85:94:117:128:91:103:127:85"
+          # Share of the test list per shard, rebalanced from main and PR eight-shard
+          # durations so the slowest and fastest shards meet.
+          PWTEST_SHARD_WEIGHTS: "90:114:100:104:108:112:112:90"
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
@@ -486,8 +508,13 @@ jobs:
       # Source tests do not read PASEO_CLI_TEST_SHARD. Run them once, on the
       # shortest E2E shard, after its runner has built the server stack.
       - name: Run CLI source tests
-        if: ${{ env.PASEO_CLI_TEST_SHARD == '3' }}
+        if: ${{ env.PASEO_CLI_TEST_SHARD == '2' }}
         run: npm run test:unit --workspace=@getpaseo/cli
+
+      # The dependency watchers write build outputs, so run them after the parallel CLI tests.
+      - name: Run dev watch shutdown regression
+        if: ${{ env.PASEO_CLI_TEST_SHARD == '3' }}
+        run: node --import tsx packages/cli/tests/23-daemon-sigint-supervisor.test.ts --dev-watch
 
   cli-tests-2:
     name: cli-tests (shard 2/3)

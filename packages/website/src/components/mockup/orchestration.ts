@@ -15,21 +15,21 @@ export const DELEGATED_TASKS: {
 }[] = [
   {
     id: "issue-412",
-    title: "Fix #412: relay handshake race",
-    branch: "fix/relay-handshake-race",
+    title: "Fix #412: WebSocket handshake race",
+    branch: "fix/websocket-handshake-race",
     provider: "codex",
   },
   {
     id: "issue-417",
-    title: "Fix #417: menu bar icon on macOS",
-    branch: "fix/menu-bar-icon",
+    title: "Fix #417: tray icon on Linux",
+    branch: "fix/linux-tray-icon",
     provider: "opencode",
-    host: "mac-mini",
+    host: "linux-mini",
   },
   {
     id: "issue-421",
-    title: "Fix #421: stale Docker setup docs",
-    branch: "docs/docker-setup",
+    title: "Fix #421: stale web setup docs",
+    branch: "docs/web-setup",
     provider: "pi",
   },
 ];
@@ -59,7 +59,7 @@ const REQUEST = "Fix the issues labeled ready, one worktree each.";
 /**
  * The orchestration scene: the user asks Claude to fix the ready issues, each in a worktree. Claude
  * lists the issues and the user's agent profiles, picks a model for each issue, and puts the one
- * that needs macOS on another machine. It says that Paseo will notify it when the agents finish.
+ * that needs a desktop environment on another machine. It says Paseo will notify it when they finish.
  * Then the pointer opens the subagents roster.
  */
 export const ORCHESTRATION = script([
@@ -75,7 +75,7 @@ export const ORCHESTRATION = script([
   },
   {
     kind: "agent",
-    text: "I will launch the UI agent on your mac-mini, because that issue is specific to macOS.",
+    text: "I will launch the UI agent on linux-mini, where it can test the tray icon.",
   },
   { kind: "tools", calls: DELEGATION_CALLS },
   {

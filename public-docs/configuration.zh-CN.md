@@ -22,7 +22,7 @@ Paseo 默认使用 `~/.paseo` 作为主目录。配置文件是：
 
 托管的 `start` 和桌面应用先使用默认值，再应用 `config.json`。继承来的 daemon 设置环境变量会从它们的启动环境中移除。
 
-前台的 `paseo daemon run`、Docker 和直接由进程管理器启动的方式会在文件之后应用环境变量。已有的旧版进程管理器参数在 worker 重启后保持其优先级。修改部署覆盖项需要停止并重新启动该部署。列表类设置会在各个来源之间追加，包括主机名和 CORS 来源。
+以前台方式运行 `paseo daemon run` 或直接由进程管理器启动时，环境变量在配置文件之后应用。已有的旧版进程管理器参数在 worker 重启后保持其优先级。修改部署覆盖项需要停止并重新启动该部署。列表类设置会在各个来源之间追加，包括主机名和 CORS 来源。
 
 ## 示例 {#example}
 
@@ -112,7 +112,7 @@ Agent Provider，包括 Paseo 自带的一等 Provider 和你在 `agents.provide
 
 ## 内置的 Web UI {#bundled-web-ui}
 
-daemon 可以在同一个 HTTP 服务器上提供浏览器 Web 客户端。官方 Docker 镜像中默认启用此功能，普通 CLI 和由桌面应用管理的 daemon 默认关闭。
+daemon 可以在同一个 HTTP 服务器上提供浏览器 Web 客户端。CLI 和由桌面应用管理的 daemon 默认关闭此功能。
 
 从 CLI 启用它：
 

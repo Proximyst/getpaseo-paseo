@@ -12,8 +12,8 @@ Everything beyond the [supported providers](/docs/supported-providers) lives und
 
 - **Extend** a first-class provider to point at a different API (Z.AI, Alibaba/Qwen, a proxy, a self-hosted endpoint).
 - **Add profiles**, multiple entries against the same underlying provider with different credentials or curated model lists.
-- **Override the binary**, run a nightly build or wrapper script instead of the installed CLI.
-- **Add ACP agents**, Gemini CLI, Hermes, or any agent speaking the Agent Client Protocol over stdio.
+- **Override the binary**, run a nightly build or a wrapper script instead of the installed CLI.
+- **Add ACP agents**, Gemini CLI, Qwen Code, or any agent speaking the Agent Client Protocol over stdio.
 - **Disable** a provider you don't use.
 
 Run `paseo reload` after editing the file. Provider changes apply to future launches without restarting the daemon.
@@ -166,11 +166,6 @@ Any agent that speaks [ACP](https://agentclientprotocol.com) over stdio can be a
         "extends": "acp",
         "label": "Google Gemini",
         "command": ["gemini", "--acp"]
-      },
-      "hermes": {
-        "extends": "acp",
-        "label": "Hermes",
-        "command": ["hermes", "acp"]
       }
     }
   }

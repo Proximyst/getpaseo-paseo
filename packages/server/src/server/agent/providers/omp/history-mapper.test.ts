@@ -1481,7 +1481,7 @@ describe("OMP history mapper", () => {
       provider: "omp",
       onAdvisorError: unexpectedAdvisorError,
     })) {
-      events.push(event);
+      if (event.type === "timeline") events.push(event);
     }
     expect(events.map((event) => event.item)).toEqual([
       { type: "assistant_message", text: "Before.", messageId: "resp-1" },
