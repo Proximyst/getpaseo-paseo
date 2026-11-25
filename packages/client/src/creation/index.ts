@@ -124,8 +124,13 @@ export class CreationClient {
     );
     const previous = this.operations.get(identity);
     if (previous) {
-      if (previous.fingerprint !== fingerprint)
-        return Promise.reject(new Error(`${kind}_request_key_conflict`));
+      if (previous.fingerprint !== fingerprint) {
+        return Promise.reject(
+          kind === "workspace"
+            ? workspaceRequestKeyConflict(previous.fingerprint, fingerprint)
+            : new Error("agent_request_key_conflict"),
+        );
+      }
       if (observer) {
         previous.observers.add(observer);
         if (previous.snapshot) this.notify(observer, previous.snapshot);
@@ -243,6 +248,28 @@ export class CreationClient {
       /* Observation does not control execution. */
     }
   }
+}
+
+function workspaceRequestKeyConflict(previousFingerprint: string, fingerprint: string): Error {
+  const previous = JSON.parse(previousFingerprint) as Record<string, unknown>;
+  const current = JSON.parse(fingerprint) as Record<string, unknown>;
+  const fields = [...new Set([...Object.keys(previous), ...Object.keys(current)])]
+    .filter(
+      (key) =>
+        !Object.hasOwn(previous, key) ||
+        !Object.hasOwn(current, key) ||
+        JSON.stringify(previous[key]) !== JSON.stringify(current[key]),
+    )
+    .sort();
+  const code = "workspace_request_key_conflict";
+  return Object.assign(
+    new Error(
+      "This workspace request key was reused with changed inputs while the previous creation is still pending in this client. " +
+        `Changed fields: ${fields.join(", ")}. ` +
+        `Check the previous creation attempt before submitting the changed inputs as a new request. (${code})`,
+    ),
+    { code },
+  );
 }
 
 function relativeDirectory(cwd: string, source: string): string {

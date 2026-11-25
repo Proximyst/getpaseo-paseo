@@ -446,7 +446,14 @@ test("combined worktree and agent creation owns setup on the workspace and repla
       ...input,
       source: { ...input.source, worktreeSlug: "different-intent" },
     });
-    expect(conflict.error).toBe("workspace_request_key_conflict");
+    expect(conflict).toMatchObject({
+      workspace: null,
+      errorCode: "workspace_request_key_conflict",
+    });
+    expect(conflict.error).toContain("Changed inputs: source.worktreeSlug");
+    expect(conflict.error).toContain("Previous attempt: completed");
+    expect(conflict.error).toContain("Check that attempt before starting a new workspace");
+    expect(conflict.error).not.toMatch(/combined-setup|different-intent/);
   } finally {
     await client.close();
     await daemon.close();

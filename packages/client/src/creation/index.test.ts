@@ -101,7 +101,13 @@ test("duplicate client submissions join one complete intent and cumulative updat
       ...f.input,
       agent: { ...f.input.agent, initialPrompt: "Different intent" },
     }),
-  ).rejects.toThrow("workspace_request_key_conflict");
+  ).rejects.toMatchObject({
+    code: "workspace_request_key_conflict",
+    message:
+      "This workspace request key was reused with changed inputs while the previous creation is still pending in this client. " +
+      "Changed fields: agent. " +
+      "Check the previous creation attempt before submitting the changed inputs as a new request. (workspace_request_key_conflict)",
+  });
   const snapshot: CreationSnapshot = {
     kind: "workspace",
     idempotencyKey: "intent-one",

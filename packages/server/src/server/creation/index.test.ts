@@ -167,17 +167,41 @@ test("an uncertain prompt outcome never resends or removes its workspace and age
 
 test("conflicting intents and resource IDs cannot start more work", async () => {
   const f = await fixture();
-  const first = f.service.create(f.input, f.observe);
+  f.input.request = {
+    source: { kind: "worktree", cwd: "/project", worktreeSlug: "original-name" },
+    firstAgentContext: { prompt: "Original prompt" },
+  };
+  const conflictingUpdates: CreationSnapshot[] = [];
+  let conflict: Promise<CreationSnapshot> | undefined;
+  const first = f.service.create(f.input, (snapshot) => {
+    f.observe(snapshot);
+    if (snapshot.phase !== "workspace_ready") return;
+    // Submit while the original request is delivering the update that would open its workspace.
+    conflict = f.service.create(
+      {
+        ...f.input,
+        request: {
+          source: { kind: "worktree", cwd: "/project", worktreeSlug: "edited-name" },
+          firstAgentContext: { prompt: "Edited prompt" },
+        },
+      },
+      (update) => conflictingUpdates.push(update),
+    );
+  });
   await f.ready.promise;
-  await expect(f.service.create({ ...f.input, request: { prompt: "changed" } })).rejects.toThrow(
-    "workspace_request_key_conflict",
-  );
+  await expect(conflict).rejects.toMatchObject({
+    code: "workspace_request_key_conflict",
+    message: expect.stringMatching(
+      /Changed inputs: firstAgentContext, source\.worktreeSlug.*Previous attempt: workspace_ready/,
+    ),
+  });
   await expect(f.service.create({ ...f.input, key: "another-intent" })).rejects.toThrow(
     "workspace_id_conflict",
   );
   f.provider.resolve();
   expect(await first).toMatchObject({ phase: "completed", error: null });
   expect(f.calls).toEqual(["workspace", "agent", "prompt"]);
+  expect(conflictingUpdates).toEqual([]);
 });
 
 test("late subscribers recover readiness and removing an observer cannot stop creation", async () => {
@@ -241,15 +265,27 @@ test("restart after a committed agent without a prompt completes without recreat
 
 test("partial provisioning without a registered workspace is not repeated", async () => {
   const f = await fixture();
+  const recoveredDirectory = await mkdtemp(join(tmpdir(), "creation-checkpoint-"));
+  directories.push(recoveredDirectory);
   let provisions = 0;
   f.input.provision = async () => {
     provisions++;
     await writeFile(join(f.directory, "partial-checkout"), "disk was changed");
+    await cp(f.directory, recoveredDirectory, { recursive: true });
     throw new Error("Git failed after creating the checkout");
   };
   const result = await f.service.create(f.input);
   expect(result).toMatchObject({ phase: "failed", failedStage: "workspace", outcomeUnknown: true });
   expect(await new CreationService(f.directory, silentLogger).create(f.input)).toEqual(result);
+  const recovered = new CreationService(recoveredDirectory, silentLogger);
+  await expect(
+    recovered.create({ ...f.input, request: { ...f.input.request, source: "/another-project" } }),
+  ).rejects.toMatchObject({
+    code: "workspace_request_key_conflict",
+    message: expect.stringContaining(
+      "Previous attempt: interrupted at the workspace stage (outcome unknown)",
+    ),
+  });
   expect(provisions).toBe(1);
 });
 

@@ -41,6 +41,7 @@ export type CreationInput = CreationRequest &
   );
 const RecordSchema = z.object({
   fingerprint: z.string(),
+  workspaceFieldFingerprints: z.record(z.string(), z.string()).optional(),
   snapshot: CreationSnapshotSchema,
   inFlight: z.enum(["workspace", "agent", "prompt"]).nullable(),
 });
@@ -63,14 +64,24 @@ export class CreationService {
 
   async create(input: CreationInput, observer?: Observer): Promise<CreationSnapshot> {
     const identity = identityFor(input.kind, input.key);
+    let unsubscribe: (() => void) | undefined;
     const admitted = this.admission.then(async () => {
       await mkdir(this.directory, { recursive: true });
       const fingerprint = digest(input.request);
       let record = await this.read(identity);
       if (!record) record = await this.readLegacyAgent(input, fingerprint);
-      if (record && record.fingerprint !== fingerprint)
-        throw new Error(`${input.kind}_request_key_conflict`);
       const running = this.active.get(identity);
+      if (record && record.fingerprint !== fingerprint) {
+        if (input.kind === "workspace")
+          throw workspaceRequestKeyConflict(
+            record,
+            input.request,
+            running ? null : record.inFlight,
+          );
+        throw new Error("agent_request_key_conflict");
+      }
+      // A request may only observe this key after proving it owns the same intent.
+      if (observer) unsubscribe = this.observe(identity, observer);
       if (running && record) return { completion: running, snapshot: record.snapshot };
       if (record?.snapshot.phase === "completed") await this.validateCompleted(record.snapshot);
       if (record?.snapshot.phase === "completed" || record?.snapshot.outcomeUnknown) {
@@ -111,14 +122,12 @@ export class CreationService {
       () => undefined,
       () => undefined,
     );
-    // Install before admission starts, so even a fast local provision cannot outrun observation.
-    const unsubscribe = observer ? this.observe(identity, observer) : () => {};
     try {
       const { completion, snapshot } = await admitted;
       if (observer) this.notify(observer, snapshot);
       return await completion;
     } finally {
-      unsubscribe();
+      unsubscribe?.();
     }
   }
 
@@ -341,6 +350,9 @@ export class CreationService {
 function initialRecord(input: CreationInput, fingerprint: string): Record {
   return {
     fingerprint,
+    ...(input.kind === "workspace"
+      ? { workspaceFieldFingerprints: workspaceFieldFingerprints(input.request) }
+      : {}),
     inFlight: null,
     snapshot: {
       kind: input.kind,
@@ -353,6 +365,53 @@ function initialRecord(input: CreationInput, fingerprint: string): Record {
     },
   };
 }
+function workspaceRequestKeyConflict(
+  record: Record,
+  request: CreationRequest["request"],
+  interruptedStage: Record["inFlight"],
+): Error {
+  const code = "workspace_request_key_conflict";
+  let inputDetail = "The earlier receipt has no field-level details.";
+  const previous = record.workspaceFieldFingerprints;
+  if (previous) {
+    const current = workspaceFieldFingerprints(request);
+    const changed = [...new Set([...Object.keys(previous), ...Object.keys(current)])]
+      .filter((field) => previous[field] !== current[field])
+      .sort();
+    if (changed.length) inputDetail = `Changed inputs: ${changed.join(", ")}.`;
+  }
+  const { phase, failedStage, outcomeUnknown } = record.snapshot;
+  const status =
+    interruptedStage && !outcomeUnknown
+      ? `interrupted at the ${interruptedStage} stage (outcome unknown)`
+      : `${phase}${failedStage ? ` at the ${failedStage} stage` : ""}${
+          outcomeUnknown ? " (outcome unknown)" : ""
+        }`;
+  return Object.assign(
+    new Error(
+      `This workspace creation key was already used with different inputs. ${inputDetail} ` +
+        `Previous attempt: ${status}. Check that attempt before starting a new workspace (${code}).`,
+    ),
+    { code },
+  );
+}
+
+function workspaceFieldFingerprints(request: CreationRequest["request"]): {
+  [field: string]: string;
+} {
+  const fields: { [field: string]: string } = {};
+  for (const [name, value] of Object.entries(request)) {
+    if (name === "source" && value && typeof value === "object") {
+      for (const [sourceField, sourceValue] of Object.entries(value)) {
+        if (sourceValue !== undefined) fields[`source.${sourceField}`] = digest(sourceValue);
+      }
+    } else if (value !== undefined) {
+      fields[name] = digest(value);
+    }
+  }
+  return fields;
+}
+
 function identityFor(kind: string, key: string): string {
   return digest([kind, key]);
 }

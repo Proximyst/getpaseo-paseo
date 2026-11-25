@@ -346,6 +346,11 @@ join active work or reuse committed stages. A persisted resource alone cannot pr
 that a provider accepted its initial prompt. Interrupted side effects with no conclusive
 receipt return an unknown outcome instead of being repeated.
 
+When a workspace creation key is reused with different inputs, check the previous attempt
+before starting a new workspace. The conflict reports the previous phase and, for newer
+receipts, which fields changed. The journal fingerprints those fields rather than storing
+their raw values for diagnostics.
+
 Agent registration commits creation. Rejecting the first prompt is a turn error on that
 agent; reporting creation failure leaves an orphaned agent and invites another Create.
 Receipt replay must not resend the prompt.
@@ -359,9 +364,11 @@ the client package, as an exception to the default no-fallback feature policy.
 
 Creation executes through the existing Session capabilities. Connection-owned delivery
 controls observation only: detaching a socket or cleaning up its Session does not cancel
-accepted creation. Updates require an explicit subscription and go only to that socket;
-reconnect uses the shared subscription owner. Legacy consumers, including Hub, keep their
-existing response contract.
+accepted creation. Updates require an explicit subscription and go only to that socket.
+A create request must match the journaled intent before it can receive progress; sending
+another attempt's workspace-ready update can open the wrong workspace in the app.
+Reconnect uses the shared subscription owner. Legacy consumers, including Hub, keep
+their existing response contract.
 
 ## Agent lifecycle
 
