@@ -223,7 +223,7 @@ URI 中的 `password=` 总是优先于环境变量，因此你可以全局设置
 
 在桌面端或网页版的直接连接设置中输入密码。
 
-## 中继 {#relay}
+## 不支持的上游设置 {#unsupported-upstream-settings}
 
 为保持与上游兼容，共享配置结构可能保留中继字段。本 fork 不支持中继连接或配对；`daemon.relay` 和 `PASEO_RELAY_*` 设置无法开启中继。请使用[直接连接或 SSH](/docs/connectivity)。
 

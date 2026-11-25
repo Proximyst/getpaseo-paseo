@@ -51,7 +51,7 @@ If the remote daemon has a password, enter it in **Daemon password**; it is stor
 
 ## Direct connections
 
-On the daemon machine, bind `daemon.listen` to a trusted LAN or VPN address and set a daemon password before exposing it beyond localhost. See [Security](/docs/security) and [Configuration](/docs/configuration#password-authentication).
+On the daemon machine, bind `daemon.listen` to a trusted LAN or VPN address and set a daemon password before exposing it beyond localhost. Password authentication does not encrypt traffic. See [Security](/docs/security) and [Configuration](/docs/configuration#password-authentication).
 
 In the desktop or browser app, open **Settings → Add host → Direct connection**, enter the host, port, and password, then connect. Enable **Use SSL** only when a TLS reverse proxy serves that address. For the CLI:
 

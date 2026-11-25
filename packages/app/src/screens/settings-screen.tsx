@@ -918,10 +918,9 @@ function HostPicker({
       onAddHost={onAddHost}
       includeEnableBuiltInDaemon={enableBuiltInDaemonOption.visible}
       onEnableBuiltInDaemon={enableBuiltInDaemonOption.onPress}
-      showActiveConnection
       searchable={false}
       title={t("settings.hostPicker.switchHost")}
-      desktopMinWidth={240}
+      desktopMinWidth={328}
       addHostTestID="settings-add-host"
       hostOptionTestID={hostOptionTestID}
     >

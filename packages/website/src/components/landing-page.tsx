@@ -133,12 +133,14 @@ export function LandingPage({
               initial={FADE_IN_UP_40}
               animate={FADE_IN}
               transition={EASE_OUT_08_DELAY_05}
-              className="relative pt-4 pb-10 md:pt-6 md:pb-14"
+              className="relative pt-4 pb-6 md:pt-6 md:pb-8"
             >
               <div>
                 <HeroMockup />
               </div>
             </motion.div>
+
+            <TrustStrip />
 
             {NATIVE_MOBILE_APPS_ENABLED && <PhoneShowcase />}
           </ChapterBand>
@@ -515,7 +517,7 @@ function TurnkeySection() {
             icon={Laptop}
             title={t("landing.runAnywhere.remoteTitle")}
             description={t("landing.runAnywhere.remoteDescription")}
-            ctaHref={localize("/docs#server--cli")}
+            ctaHref={localize("/docs/connectivity")}
             ctaLabel={t("landing.runAnywhere.remoteCta")}
           />
           <TurnkeyExtensionCard
@@ -1395,9 +1397,36 @@ const FAQ_LINKS = {
   agents: "/agents",
   muse: "/docs/supported-providers/muse-code",
   voice: "/docs/voice",
-  configuration: "/docs/configuration",
+  connectivity: "/docs/connectivity",
   worktrees: "/docs/worktrees",
 };
+
+function TrustStrip() {
+  const { t } = useTranslation();
+  return (
+    <div className="pb-10 md:pb-14">
+      <ul className="flex flex-col items-center justify-center gap-y-2 text-xs text-white/60 sm:flex-row sm:flex-wrap sm:gap-x-4 md:text-sm">
+        <li className="flex items-center gap-x-3 sm:gap-x-4">
+          <span>{t("landing.trustStrip.noTelemetry")}</span>
+          <span aria-hidden="true" className="select-none text-white/25">
+            ·
+          </span>
+          <span>{t("landing.trustStrip.localFirst")}</span>
+        </li>
+        <li aria-hidden="true" className="hidden select-none text-white/25 sm:block">
+          ·
+        </li>
+        <li className="flex items-center gap-x-3 sm:gap-x-4">
+          <span>{t("landing.trustStrip.openSource")}</span>
+          <span aria-hidden="true" className="select-none text-white/25">
+            ·
+          </span>
+          <span>{t("landing.trustStrip.independent")}</span>
+        </li>
+      </ul>
+    </div>
+  );
+}
 
 function FAQ() {
   const { t } = useTranslation();

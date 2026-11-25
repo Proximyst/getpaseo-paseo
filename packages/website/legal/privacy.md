@@ -1,10 +1,10 @@
 ---
 title: "Privacy Policy"
-description: "What stays on your machines, what the encrypted relay can see, and what Paseo Hub stores."
-lastUpdated: "2026-08-29"
+description: "What stays on your machines, how remote connections handle your data, and what hosted Paseo Hub stores."
+lastUpdated: "2026-11-25"
 ---
 
-Paseo is local-first. Installing or using the open-source software does not send us your code, prompts, files, terminal output, or agent conversations. This policy explains the separate data boundaries for local Paseo, the optional official relay, the hosted Paseo Hub, and paseo.sh.
+Paseo is local-first. Installing or using the open-source software locally does not automatically send your code, prompts, files, terminal output, or agent conversations to Paseo's hosted services. This policy explains the separate data boundaries for local Paseo, the optional hosted Paseo Hub, and paseo.sh.
 
 ## Who is responsible
 
@@ -14,7 +14,7 @@ Roc Boronat 48, Bajos 2\
 08005 Barcelona, Spain\
 Email: [hello@moboudra.com](mailto:hello@moboudra.com)
 
-Mohamed Boudra Ziani is the data controller for personal data processed through the official Paseo website, relay, and hosted Hub. Independently self-hosted daemons, Hubs, and relays are controlled by their operators and are not covered by this policy.
+Mohamed Boudra Ziani is the data controller for personal data processed through the official Paseo website and hosted Hub. Independently self-hosted daemons and Hubs are controlled by their operators and are not covered by this policy.
 
 ## Local Paseo apps and daemons
 
@@ -24,16 +24,11 @@ Packaged desktop apps check GitHub Releases for updates. GitHub receives the ord
 
 Agents such as Claude Code, Codex, and OpenCode communicate with their providers using credentials on your machine. Paseo does not manage or intercept those provider API calls.
 
-## The official relay
+## Remote connections
 
-The relay is optional. To connect your client and daemon, it processes:
+Clients connect to your daemon directly or, in the Linux desktop app and CLI, through SSH. This fork does not support relay connections. Your client can receive workspace data from your daemon.
 
-- IP addresses and connection timing
-- Session identifiers and public handshake keys
-- Message sizes and aggregate bandwidth
-- Temporary connection and routing state
-
-Your client and daemon encrypt application traffic end-to-end with NaCl box encryption. The relay carries ciphertext and cannot read your code, prompts, terminal output, or agent conversations. Payloads exist in relay memory only while being forwarded. We do not store message contents. Infrastructure may retain limited operational logs and aggregate metrics for security, capacity planning, and troubleshooting.
+A local Unix socket keeps connection traffic on the daemon's machine. Unencrypted direct connections do not protect traffic from other parties on the network. Use a trusted LAN, a VPN you control, an HTTPS reverse proxy, or an SSH tunnel as described in the [connection guide](/docs/connectivity).
 
 ## Paseo Hub
 
@@ -56,7 +51,7 @@ Paseo controls account, billing, security, and service-operation data. When an o
 
 We process data to:
 
-- Provide accounts, Hub workflows, relay connectivity, billing, and support
+- Provide accounts, Hub workflows, billing, and support
 - Authenticate users, daemons, and connected services
 - Prevent abuse and protect the services
 - Maintain operational and audit records

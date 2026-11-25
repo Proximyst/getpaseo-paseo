@@ -359,8 +359,8 @@
     },
     "closingCta": {
       "eyebrow": "开始使用",
-      "title": "你的 Agent，在每块屏幕上。",
-      "description": "下载桌面应用，或在任意机器上运行 daemon。基于 Apache 2.0 开源。"
+      "title": "你的 Agent，运行在你自己的机器上。",
+      "description": "下载 Linux 桌面应用，或在 Linux 服务器上运行 daemon。基于 Apache 2.0 开源。"
     },
     "socialProof": {
       "title": "深受开发者喜爱",
@@ -380,8 +380,8 @@
       "browserDescription": "在浏览器中直连 daemon，使用完整的 Paseo 界面。",
       "browserCta": "网页端设置",
       "remoteTitle": "远程机器",
-      "remoteDescription": "在家庭实验室或云主机上运行 Paseo",
-      "remoteCta": "文档",
+      "remoteDescription": "在 Linux 服务器上运行 daemon，再从桌面应用或 CLI 直连或通过 SSH 连接。",
+      "remoteCta": "连接指南",
       "teamsTitle": "团队与触发器",
       "teamsDescription": "通过 Paseo Hub 与团队共享 daemon 并自动化运行 Agent",
       "teamsCta": "Paseo Hub"
@@ -457,22 +457,28 @@
       "chatLabel": "Paseo Agent 对话",
       "diffLabel": "Paseo diff 视图"
     },
+    "trustStrip": {
+      "noTelemetry": "无遥测",
+      "localFirst": "本地优先",
+      "openSource": "开源",
+      "independent": "独立项目"
+    },
     "faq": {
       "title": "常见问题",
       "freeQuestion": "Paseo 免费吗？",
       "freeAnswer": "是的。Paseo 免费且开源。你需要安装 AgentProvider 并使用自己的凭据。语音默认在本地处理，配置后也可以选择使用云端语音服务。",
       "codeQuestion": "我的代码会离开我的机器吗？",
-      "codeAnswer": "Paseo 不会把你的代码发送到任何地方。Agent 在本地运行，像平常一样调用各自的 API。远程访问时，可以通过局域网直连，或使用 SSH 和你自己的隧道。",
+      "codeAnswer": "默认情况下，Paseo 不会把你的代码上传到托管服务。Agent 在 daemon 所在的机器上运行，像平常一样调用各自的 API。远程连接时，客户端直接从 daemon 接收工作区数据。",
       "agentsQuestion": "支持哪些 Agent？",
       "agentsAnswer": "Paseo 支持很多 Provider。它为 Claude、Codex、OpenCode、Pi、OMP、Antigravity 和 Muse Code 提供了专门的实现，并通过 ACP 支持更多 Agent。完整列表见：<agents>所有支持的 Provider</agents>。另见 <muse>Muse Code 的设置与限制</muse>。",
       "providersQuestion": "Paseo 如何运行 Provider？",
       "providersAnswer": "Paseo 按你平常的方式运行你机器上已安装的 Provider，不会修改或改变它们的行为。",
       "desktopQuestion": "我需要桌面应用吗？",
-      "desktopAnswer": "不需要。你可以无界面运行 daemon，并用任意客户端连接。桌面应用只是把 daemon 和界面打包在一起。",
+      "desktopAnswer": "不需要。你可以无界面运行 daemon，再从浏览器或 CLI 连接。Linux 桌面应用把 daemon 和界面打包在一起。",
       "voiceQuestion": "语音功能如何工作？",
       "voiceAnswer": "语音默认在你的设备本地运行。你说话，应用转写后以文本形式发送给 Agent。你也可以配置 OpenAI 语音服务，获得更高质量的转写和语音合成。详见<voice>语音文档</voice>。",
       "networkQuestion": "可以从外部网络连接吗？",
-      "networkAnswer": "可以。你可以使用 SSH、搭建自己的隧道（Tailscale、Cloudflare Tunnel 等），或直接连接 daemon。详见<configuration>配置</configuration>。",
+      "networkAnswer": "可以。你可以通过 Tailscale 等 VPN 直连，使用 HTTPS 反向代理，或从 Linux 桌面应用或 CLI 通过 SSH 连接。详见<connectivity>连接指南</connectivity>。",
       "gitQuestion": "我需要 git 或 GitHub 吗？",
       "gitAnswer": "不需要。Paseo 可在任意目录中工作。worktree 是可选的，只在使用 git 时才相关。你可以在平常工作的任何地方运行 Agent。",
       "banQuestion": "使用 Paseo 会被封号吗？",
@@ -498,7 +504,6 @@
         "addProject": "添加 project",
         "addHost": "添加主机",
         "hosts": "主机",
-        "agentCount": "{{count}} 个 Agent",
         "hostLinks": {
           "local": "本地",
           "tailscale": "Tailscale",

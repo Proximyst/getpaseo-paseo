@@ -8,19 +8,19 @@ nav: 安全
 
 Paseo 使用客户端-服务器架构。Daemon 在 Linux 机器上运行并管理编程 Agent。Linux 桌面端、CLI 和浏览器连接到 daemon。
 
-你的代码从不离开你的机器。Paseo 是一个本地优先的工具，直接连接到你的开发环境。
+Paseo 以本地运行为优先：Agent 在你自己的机器上运行，客户端连接你的开发环境无需 Paseo 账号，也不会发送遥测数据。已连接的客户端可以接收工作区数据，Agent 提供商和可选集成则按照各自的政策处理数据。
 
 ## 架构 {#architecture}
 
-客户端通过 WebSocket 直接连接，可以使用 VPN 或 TLS 反向代理加密。Linux 桌面端和 CLI 也可以通过 SSH 隧道访问已运行的 daemon。浏览器可通过手动 SSH 端口转发或使用 daemon 的内置 Web UI。
+客户端通过 WebSocket 直接连接，可以使用 VPN 或 TLS 反向代理加密。Linux 桌面端和 CLI 也可以通过 SSH 隧道访问已运行的 daemon。浏览器用户可以手动通过 SSH 转发 daemon 的端口；daemon 提供内置 Web UI 时也可这样连接。
 
-本 fork 不支持中继连接、配对、原生移动应用或 Docker 部署。参见[连接方式](/docs/connectivity)。
+本 fork 不支持中继连接、配对或部署，也不支持原生移动应用或 Docker 部署。为兼容依赖和上游合并而保留的共享加密和协议代码，并不提供可用的连接方式。参见[连接方式](/docs/connectivity)。
 
 ## 直接连接 {#direct-connections}
 
 Daemon 默认监听 `127.0.0.1:6767`，仅本机可访问。直接连接、SSH 和 Tailscale 的配置说明见[连接方式](/docs/connectivity)。
 
-### Unix 套接字 {#socket-file-cli-only}
+### Unix 套接字 {#socket-file}
 
 如需隔离本地连接，可让 daemon 监听 Unix 套接字文件而非 TCP 端口。CLI 和桌面端可使用本地套接字；浏览器需要 HTTP/WebSocket 网络连接。能打开套接字的本地进程仍可访问 daemon。
 
@@ -46,7 +46,7 @@ Paseo 使用主机白名单校验传入请求的 `Host` 请求头。主机无法
 
 ## 密码验证 {#password-authentication}
 
-默认情况下，任何能访问 daemon 监听地址的人都可以连接。在 localhost 上这没有问题，只有本地进程能访问。但如果你绑定到某个网络接口（例如你的局域网 IP 或 `0.0.0.0`），或者你不完全信任本地网络，可以要求提供密码。
+默认情况下，任何能访问 daemon 监听地址的人都可以连接，包括能访问回环监听地址的其他本地用户和进程。将 daemon 绑定到网络接口或转发到本机之外前，请先设置密码。
 
 配置密码后，HTTP API 请求需要 `Authorization: Bearer <password>` 请求头，WebSocket 客户端也需要在连接时验证身份。未通过验证的 HTTP 请求返回 `401 Unauthorized`。健康检查和协议专用端点遵循自己的访问规则；参见仓库的 `SECURITY.md`。
 

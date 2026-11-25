@@ -10,15 +10,15 @@ category: Getting started
 
 Paseo follows a client-server architecture. The daemon runs on your Linux machine and manages your coding agents. Linux desktop, CLI, and browser clients connect to the daemon to monitor and control those agents.
 
-Your code never leaves your machine. Paseo is a local-first tool that connects directly to your development environment.
+Paseo is local-first: agents run on your own machine, and clients connect to your development environment without a Paseo account or telemetry. Connected clients can receive workspace data, and agent providers and optional integrations handle data according to their own policies.
 
 ## Architecture
 
 The Paseo daemon runs on a Linux workstation or server. It listens for connections and manages agent lifecycles.
 
-Clients connect directly over WebSocket, optionally secured by a VPN or TLS reverse proxy. Linux desktop and CLI also support SSH tunnels to an already-running daemon. Browser users can use SSH port forwarding or the daemon's bundled web UI.
+Clients connect directly over WebSocket, optionally secured by a VPN or TLS reverse proxy. Linux desktop and CLI also support SSH tunnels to an already-running daemon. Browser users can forward the daemon's port through SSH manually, including when the daemon serves the bundled web UI.
 
-Relay connections, relay pairing, native mobile apps, and Docker deployment are unsupported. Shared upstream encryption/protocol code remains for dependency and merge compatibility, not as an enabled connection path. See [Connectivity](/docs/connectivity).
+This fork does not support relay connections, pairing, or deployment, native mobile apps, or Docker deployment. Shared upstream encryption and protocol code remains for dependency and merge compatibility; it does not provide an enabled connection path. See [Connectivity](/docs/connectivity).
 
 ## Direct connections
 
@@ -50,9 +50,9 @@ Configure via `daemon.hostnames` in `config.json`:
 
 ## Password authentication
 
-By default, anyone who can reach the daemon's listening address can connect. On localhost this is fine, only local processes have access. But if you bind to a network interface (e.g. your LAN IP or `0.0.0.0`), or if you don't fully trust your local network, you can require a password.
+By default, anyone who can reach the daemon's listening address can connect, including other local users and processes that can reach the loopback listener. Set a password before binding to a network interface or forwarding the daemon beyond localhost.
 
-When a password is configured, HTTP API requests require an `Authorization: Bearer <password>` header, and every WebSocket client must authenticate when it connects. Unauthenticated requests receive a `401 Unauthorized` response. Health and protocol-specific capability endpoints have their own admission rules; consult the repository's `SECURITY.md` for the full trust boundary.
+When a password is configured, HTTP API requests require an `Authorization: Bearer <password>` header, and every WebSocket client must authenticate when it connects. Unauthenticated HTTP requests receive a `401 Unauthorized` response. Health and protocol-specific capability endpoints have their own admission rules; consult the repository's `SECURITY.md` for the full trust boundary.
 
 If you enable the [bundled web UI](/docs/web-ui), its static files are also served without the password so the login screen can render. This is by design, the API and WebSocket still require authentication before any agent data is returned or any command runs. Set a password before binding the daemon to a network so the data behind the page stays protected.
 

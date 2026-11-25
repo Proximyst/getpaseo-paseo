@@ -35,23 +35,13 @@
   <img src="https://paseo.sh/hero-mockup.png" alt="Paseo app screenshot" width="100%">
 </p>
 
-<p align="center">
-  <img src="https://paseo.sh/mobile-mockup.png" alt="Paseo mobile app" width="100%">
-</p>
-
-> [!NOTE]
-> 我是独立维护者，不一定每天都能及时处理 GitHub Issues。
-> 如果问题很紧急或阻塞了你，[Discord](https://discord.gg/jz8T2uahpH) 是最快联系到我的地方。
-
----
-
-在你自己的机器上并行运行 agents。无论在手机上还是桌前，都能推进交付。
+Paseo 的这个 fork 是面向 **Linux 桌面端、网页版和 CLI** 的开源开发环境。你可以在自己的机器上并行运行 Agent，为每个 Agent 使用独立的工作树，也可以通过直连或 SSH 访问其他 Linux 主机。
 
 - **自托管：** Agents 在你的机器上运行，使用完整的本地开发环境、工具、配置和技能。
 - **多提供商：** 通过同一个界面使用 Claude Code、Codex、Copilot、OpenCode 和 Pi。为每个任务选择合适的模型。
 - **语音控制：** 在语音模式下口述任务或讨论问题。需要免手操作时很方便。
-- **跨设备：** 支持 iOS、Android、桌面端、Web 和 CLI。在桌前开始工作，用手机查看进度，也可以从终端脚本化操作。
-- **隐私优先：** Paseo 没有遥测、追踪，也不会强制登录。
+- **多种客户端：** 使用 Linux 桌面应用、浏览器或 CLI 连接本地和远程 daemon。
+- **隐私优先：** 无遥测、无追踪，客户端连接 daemon 无需 Paseo 账号。参见[安全指南](public-docs/security.zh-CN.md)。
 
 ## 赞助商
 
@@ -66,7 +56,7 @@
 
 ## 快速开始
 
-Paseo 会运行一个名为 daemon 的本地服务，用来管理你的 coding agents。桌面 app、移动 app、Web app 和 CLI 等客户端都会连接到它。
+Paseo 会运行一个名为 daemon 的本地服务，用来管理你的编程 Agent。Linux 桌面应用、网页版和 CLI 都可以连接到它。
 
 ### 前置条件
 
@@ -78,27 +68,28 @@ Paseo 会运行一个名为 daemon 的本地服务，用来管理你的 coding a
 - [OpenCode](https://github.com/anomalyco/opencode)
 - [Pi](https://pi.dev)
 
-### 桌面 app（推荐）
+### Linux 桌面应用（推荐）
 
-从 [paseo.sh/download](https://paseo.sh/zh-CN/download) 或 [GitHub releases 页面](https://github.com/getpaseo/paseo/releases)下载。打开 app 后 daemon 会自动启动，不需要再安装其他东西。
+从[本 fork 的发布页面](https://github.com/Proximyst/getpaseo-paseo/releases)获取 Linux 软件包，或[自行构建桌面应用](docs/development.md)。打开应用后，daemon 会自动启动。上游下载链接以及日文和韩文 README 介绍的是上游发布版本，不代表本 fork 支持的目标。
 
-如果要从手机连接，在 Settings 中扫描显示的二维码。
+在 Arch Linux 上，可以[使用仓库根目录的 `PKGBUILD` 构建并安装](docs/development.md#arch-linux-package)。
 
-### CLI / 无头模式
+### 服务器
 
-安装 CLI 并启动 Paseo：
+在服务器、虚拟机或其他未安装桌面应用的机器上，安装 CLI 并启动 daemon：
 
 ```bash
 npm install -g @getpaseo/cli
 paseo
 ```
 
-终端中会显示一个二维码。你可以从任意客户端连接。这个方式适合服务器和远程机器。
+Paseo 会启动本地 daemon。远程客户端可以通过可信的局域网或 VPN 直接连接，Linux 桌面应用和 CLI 也可以使用 SSH。本 fork 不支持中继传输或原生移动应用。
 
 完整安装和配置见：
 
-- [文档](https://paseo.sh/zh-CN/docs)
-- [配置参考](https://paseo.sh/zh-CN/docs/configuration)
+- [快速开始](public-docs/index.zh-CN.md)
+- [连接指南](public-docs/connectivity.zh-CN.md)
+- [配置参考](public-docs/configuration.zh-CN.md)
 
 ## CLI
 
@@ -116,7 +107,7 @@ paseo send abc123 "also add tests" # 发送后续任务
 paseo --host workstation.local:6767 run "run the full test suite"
 ```
 
-更多内容见[完整 CLI 参考](https://paseo.sh/zh-CN/docs/cli)。
+更多内容见[完整 CLI 参考](public-docs/cli.zh-CN.md)。
 
 ## Skills
 
@@ -137,10 +128,10 @@ npx skills add getpaseo/paseo
 Monorepo 包结构速览：
 
 - `packages/server`：Paseo daemon（agent 进程编排、WebSocket API、MCP server）
-- `packages/app`：Expo 客户端（iOS、Android、Web）
+- `packages/app`：Expo 网页客户端和共享桌面界面（保留上游原生代码，但未启用）
 - `packages/cli`：用于 daemon 和 agent 工作流的 `paseo` CLI
-- `packages/desktop`：Electron 桌面 app
-- `packages/relay`：用于远程连接的 relay 包
+- `packages/desktop`：Linux Electron 桌面应用
+- `packages/relay`：保留的上游传输和加密依赖；中继连接已禁用
 - `packages/website`：营销站点和文档（`paseo.sh`）
 
 常用命令：
@@ -162,18 +153,17 @@ npm run build:server
 npm run typecheck
 ```
 
+### 保留的上游代码
+
+为减少合并上游时的冲突，仓库保留了共享 React Native 组件、平台特定代码和中继协议实现。这些代码并不代表本 fork 支持相应的产品。本 fork 发布 Linux 桌面应用和 npm 包，支持网页版和 CLI，以及 WebSocket 直连、SSH 和本地 Unix 套接字。不支持 Docker、iOS/Android、应用商店或 F-Droid、Windows、macOS、Nix 和中继部署。合并可能重新启用这些功能的改动前，请参见[上游合并指南](.agents/skills/merge-upstream/SKILL.md)。
+
 ## 支持 Paseo
 
 Paseo 由一个人开发，靠使用它的人来资助。你可以通过 [GitHub Sponsors](https://github.com/sponsors/boudra) 支持这项工作。公司也可以按月[赞助 Paseo](https://paseo.sh/zh-CN/sponsor#spot)，logo 会展示在本 README 顶部，以及 paseo.sh 的首页和文档中。
 
 ## 相关项目
 
-- [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) — 官方分布式 relay，使用 Elixir 编写
 - [paseo-vscode](https://marketplace.visualstudio.com/items?itemName=hinnes.paseo-vscode) — VS Code 扩展
-
-### 本 fork 的连接方式
-
-本 fork 仅支持 Linux 桌面、浏览器和 CLI，使用直接连接或 SSH，不支持部署或启用 relay。当前设置以[英文 README](README.md)为准；本页其余译文保留上游背景。
 
 ## License
 

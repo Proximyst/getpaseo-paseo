@@ -1,12 +1,12 @@
 ---
 title: "隐私政策"
-description: "哪些数据留在你的机器上、加密中继能看到什么，以及 Paseo Hub 存储哪些数据。"
-lastUpdated: "2026-08-29"
+description: "哪些数据留在你的机器上、远程连接如何处理你的数据，以及托管 Paseo Hub 存储哪些数据。"
+lastUpdated: "2026-11-25"
 ---
 
 本中文版本为英文原文的翻译，仅供参考。如两者存在任何不一致，以英文版本为准。
 
-Paseo 是本地优先的。安装或使用这款开源软件不会向我们发送你的代码、提示词、文件、终端输出或 Agent 对话。本政策说明本地 Paseo、可选的官方中继、托管的 Paseo Hub 以及 paseo.sh 各自独立的数据边界。
+Paseo 是本地优先的。在本地安装或使用这款开源软件，不会自动将你的代码、提示词、文件、终端输出或 Agent 对话发送到 Paseo 的托管服务。本政策说明本地 Paseo、可选的托管 Paseo Hub 以及 paseo.sh 各自的数据边界。
 
 ## 谁负责
 
@@ -16,7 +16,7 @@ Roc Boronat 48, Bajos 2\
 08005 Barcelona, Spain\
 邮箱：[hello@moboudra.com](mailto:hello@moboudra.com)
 
-Mohamed Boudra Ziani 是通过官方 Paseo 网站、中继和托管 Hub 处理的个人数据的数据控制者。独立自托管的 daemon、Hub 和中继由其运营者控制，不受本政策约束。
+Mohamed Boudra Ziani 是通过官方 Paseo 网站和托管 Hub 处理的个人数据的数据控制者。独立自托管的 daemon 和 Hub 由各自的运营者控制，不受本政策约束。
 
 ## 本地 Paseo 应用和 daemon
 
@@ -26,16 +26,11 @@ Paseo 在你的机器上运行。它不会向我们发送分析数据、遥测�
 
 Claude Code、Codex 和 OpenCode 等 Agent 使用你机器上的凭据与各自的 Provider 通信。Paseo 不管理也不拦截这些 Provider API 调用。
 
-## 官方中继
+## 远程连接
 
-中继是可选的。为了连接你的客户端和 daemon，它会处理：
+客户端直接连接你的 daemon；Linux 桌面应用和 CLI 也可以通过 SSH 连接。这个 fork 不支持中继连接。客户端可以从你的 daemon 接收工作区数据。
 
-- IP 地址和连接时间
-- 会话标识符和公开握手密钥
-- 消息大小和总带宽
-- 临时连接和路由状态
-
-你的客户端和 daemon 使用 NaCl box 加密对应用流量进行端到端加密。中继传输的是密文，无法读取你的代码、提示词、终端输出或 Agent 对话。有效载荷仅在转发期间存在于中继内存中。我们不存储消息内容。基础设施可能会保留有限的运维日志和汇总指标，用于安全、容量规划和故障排查。
+本地 Unix 套接字的连接流量只在 daemon 所在的机器上流转。未经加密的直连无法防止网络上的其他方查看流量。请按照[连接指南](/docs/connectivity)，使用受信任的局域网、你自己控制的 VPN、HTTPS 反向代理或 SSH 隧道。
 
 ## Paseo Hub
 
@@ -58,7 +53,7 @@ Paseo 控制账户、账单、安全和服务运营数据。当某个组织使�
 
 我们处理数据是为了：
 
-- 提供账户、Hub 工作流、中继连接、账单和支持
+- 提供账户、Hub 工作流、账单和支持
 - 对用户、daemon 和已连接的服务进行身份验证
 - 防止滥用并保护服务
 - 维护运营和审计记录

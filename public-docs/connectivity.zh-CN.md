@@ -49,7 +49,7 @@ paseo --host 'ssh://user@host?daemonPort=7777' ls -a
 
 ## 直接连接 {#direct-connections}
 
-在 daemon 所在机器上，将 `daemon.listen` 绑定到受信任的局域网或 VPN 地址，并在允许本机之外的连接前设置 daemon 密码。参见[安全](/docs/security)和[密码认证](/docs/configuration#password-authentication)。
+在 daemon 所在机器上，将 `daemon.listen` 绑定到受信任的局域网或 VPN 地址，并在允许本机之外的连接前设置 daemon 密码。密码认证不会加密流量。参见[安全](/docs/security)和[密码认证](/docs/configuration#password-authentication)。
 
 在桌面端或网页版中，打开 **设置 → 添加主机 → 直接连接**，输入主机、端口和密码，然后连接。仅当地址由 TLS 反向代理提供服务时启用 **使用 SSL**。CLI 示例：
 
@@ -95,7 +95,7 @@ tailscale ip -4
 
 保留文件中已有的其他设置。如果文件中已有 `daemon` 对象，请把 `listen` 加到该对象中。
 
-如需用密码限制访问，请参见[密码认证](/docs/configuration#password-authentication)。
+在绑定到 localhost 之外的地址之前，请配置[密码认证](/docs/configuration#password-authentication)。
 
 重启 daemon：
 

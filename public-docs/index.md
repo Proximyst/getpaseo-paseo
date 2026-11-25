@@ -10,7 +10,7 @@ category: Getting started
 
 This fork of Paseo is an agentic development environment for running coding agents, editing files, reviewing changes, and testing your work. Agents run on your Linux machines; Linux desktop, browser/web UI, and CLI clients connect directly or over SSH. Docker, native mobile apps, relay, Windows, and macOS are not supported.
 
-## Linux desktop app (recommended)
+## Linux desktop app (recommended) {#desktop-app-recommended}
 
 Install a Linux desktop package from this fork's releases, or build it from source using the repository's development guide. Upstream downloads at paseo.sh and getpaseo/paseo are not fork builds.
 

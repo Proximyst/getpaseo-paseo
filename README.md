@@ -44,7 +44,7 @@ This fork of Paseo is an open source agentic development environment for **Linux
 - **Multi-provider:** Claude Code, Codex, Copilot, OpenCode, Pi, Antigravity, and Muse Code through the same interface. Pick the right model for each job.
 - **Voice control:** Dictate tasks or talk through problems in voice mode. Hands-free when you need it.
 - **Multiple clients:** Use the Linux desktop app, a browser, or the CLI with your local and remote daemons.
-- **Privacy-first:** Paseo doesn't have any telemetry, tracking, or forced log-ins.
+- **Privacy-first:** No telemetry, tracking, or required Paseo account for client-to-daemon connections. See the [security guide](public-docs/security.md).
 
 [Run parallel tasks in Paseo](https://paseo.sh/docs/parallel-development): start agents in separate worktrees, review their diffs, run each app, and check it in the built-in browser.
 
@@ -95,7 +95,7 @@ Paseo also runs Cursor, Gemini CLI, and many other agents. See [Supported provid
 
 ### Linux desktop app (recommended)
 
-Use the Linux packages from this fork's releases, or [build the desktop app](docs/development.md). Open the app and the daemon starts automatically. Upstream download links and translated READMEs describe upstream releases, not this fork's supported targets.
+Use the Linux packages from [this fork's releases](https://github.com/Proximyst/getpaseo-paseo/releases), or [build the desktop app](docs/development.md). Open the app and the daemon starts automatically. Upstream download links and the Japanese and Korean READMEs describe upstream releases, not this fork's supported targets.
 
 On Arch Linux, [build and install the fork with the root `PKGBUILD`](docs/development.md#arch-linux-package).
 
@@ -204,7 +204,7 @@ npm run typecheck
 
 ### Retained upstream code
 
-Shared React Native components, platform-specific branches, and relay protocol code remain where removing them would make upstream merges harder. Their presence is not a support commitment: this fork ships Linux desktop and npm packages, supports the browser UI and CLI, and uses direct or SSH connections only. Docker, iOS/Android, app stores/F-Droid, Windows, macOS, and relay deployment are outside its supported scope. See the [upstream merge skill](.agents/skills/merge-upstream/SKILL.md) before importing changes that could re-enable them.
+Shared React Native components, platform-specific branches, and relay protocol code remain where removing them would make upstream merges harder. Their presence is not a support commitment: this fork ships Linux desktop and npm packages, supports the browser UI and CLI, and supports direct WebSocket, SSH, and local Unix socket connections. Docker, iOS/Android, app stores/F-Droid, Windows, macOS, Nix, and relay deployment are outside its supported scope. See the [upstream merge skill](.agents/skills/merge-upstream/SKILL.md) before importing changes that could re-enable them.
 
 ## Support Paseo
 

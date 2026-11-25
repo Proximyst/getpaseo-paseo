@@ -359,8 +359,8 @@
     },
     "closingCta": {
       "eyebrow": "Get started",
-      "title": "Your agents, on every screen.",
-      "description": "Download the desktop app or run the daemon on any machine. Open source under Apache 2.0."
+      "title": "Your agents, on your machines.",
+      "description": "Download the Linux desktop app or run the daemon on a Linux server. Open source under Apache 2.0."
     },
     "socialProof": {
       "title": "Loved by developers",
@@ -380,8 +380,8 @@
       "browserDescription": "Use the full Paseo UI in your browser by connecting directly to your daemon.",
       "browserCta": "Web setup",
       "remoteTitle": "Remote machines",
-      "remoteDescription": "Run Paseo on a home lab, or a cloud machine",
-      "remoteCta": "Docs",
+      "remoteDescription": "Run the daemon on a Linux server and connect directly or through SSH from the desktop app or CLI.",
+      "remoteCta": "Connection guide",
       "teamsTitle": "Teams and triggers",
       "teamsDescription": "Share daemons with your team and automate runs with Paseo Hub",
       "teamsCta": "Paseo Hub"
@@ -457,22 +457,28 @@
       "chatLabel": "Paseo agent chat",
       "diffLabel": "Paseo diff view"
     },
+    "trustStrip": {
+      "noTelemetry": "No telemetry",
+      "localFirst": "Local-first",
+      "openSource": "Open source",
+      "independent": "Independent"
+    },
     "faq": {
       "title": "FAQ",
       "freeQuestion": "Is this free?",
       "freeAnswer": "Yes. Paseo is free and open source. You need agent providers installed with your own credentials. Voice is local-first by default and can optionally use cloud speech providers if you configure them.",
       "codeQuestion": "Does my code leave my machine?",
-      "codeAnswer": "Paseo doesn't send your code anywhere. Agents run locally and talk to their own APIs as they normally would. For remote access, connect directly over your local network or use SSH or your own tunnel.",
+      "codeAnswer": "Paseo doesn't upload your code to a hosted service by default. Agents run on your daemon's machine and talk to their own APIs as they normally would. When you connect remotely, your client receives workspace data directly from your daemon.",
       "agentsQuestion": "What agents does it support?",
       "agentsAnswer": "Paseo supports many providers. It has custom implementations for Claude, Codex, OpenCode, Pi, OMP, Antigravity, and Muse Code, and supports many more via ACP. See the full list here: <agents>all supported providers</agents>. See <muse>Muse Code setup and limitations</muse>.",
       "providersQuestion": "How does Paseo run providers?",
       "providersAnswer": "Paseo runs the providers installed on your machine as you'd normally run them. Paseo doesn't modify or change their behavior.",
       "desktopQuestion": "Do I need the desktop app?",
-      "desktopAnswer": "No. You can run the daemon headless and use any client to connect. The desktop app just bundles the daemon with a UI.",
+      "desktopAnswer": "No. You can run the daemon headless and connect from your browser or the CLI. The Linux desktop app bundles the daemon with the UI.",
       "voiceQuestion": "How does voice work?",
       "voiceAnswer": "Voice runs locally on your device by default. You talk, the app transcribes and sends it to your agent as text. Optionally, you can configure OpenAI speech providers for higher-quality transcription and text-to-speech. See the <voice>voice docs</voice>.",
       "networkQuestion": "Can I connect from outside my network?",
-      "networkAnswer": "Yes. Use SSH, set up your own tunnel (Tailscale, Cloudflare Tunnel, etc.), or connect to the daemon directly. See <configuration>configuration</configuration>.",
+      "networkAnswer": "Yes. Connect directly over a VPN such as Tailscale, use an HTTPS reverse proxy, or connect through SSH from the Linux desktop app or CLI. See the <connectivity>connection guide</connectivity>.",
       "gitQuestion": "Do I need git or GitHub?",
       "gitAnswer": "No. Paseo works in any directory. Worktrees are optional and only relevant if you use git. You can run agents anywhere you'd normally work.",
       "banQuestion": "Can I get banned for using Paseo?",
@@ -498,7 +504,6 @@
         "addProject": "Add project",
         "addHost": "Add host",
         "hosts": "Hosts",
-        "agentCount": "{{count}} agents",
         "hostLinks": {
           "local": "Local",
           "tailscale": "Tailscale",

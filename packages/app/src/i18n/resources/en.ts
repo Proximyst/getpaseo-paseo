@@ -344,6 +344,7 @@ export const en = {
       viewDiagram: "View diagram",
     },
     actions: {
+      copyQuote: "Copy quote",
       copyCode: "Copy code",
       copyTurn: "Copy turn",
       copyMessage: "Copy message",
@@ -2952,6 +2953,23 @@ export const en = {
         name: {
           label: "Name",
         },
+        icon: {
+          label: "Icon",
+          accessibilityLabel: "Icon, {{value}}",
+          auto: "Auto",
+          autoDetected: "Auto ({{icon}})",
+          options: {
+            server: "Server",
+            laptop: "Laptop",
+            desktop: "Desktop",
+            mini: "Mini",
+            workstation: "Workstation",
+            cloud: "Cloud",
+            container: "Container",
+            board: "Single-board PC",
+            terminal: "Terminal",
+          },
+        },
         color: {
           label: "Color",
           accessibilityLabel: "Color, {{value}}",
@@ -2987,6 +3005,13 @@ export const en = {
         relay: "Relay",
         local: "Local",
         remoteSsh: "Remote SSH",
+      },
+      connectionKinds: {
+        local: "Local",
+        tailscale: "Tailscale",
+        ssh: "SSH",
+        direct: "Direct",
+        routed: "Via",
       },
       connections: {
         title: "Connections",
