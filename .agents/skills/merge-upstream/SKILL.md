@@ -49,4 +49,12 @@ The `@getpaseo/relay` workspace also contains shared cryptography. Its continued
 3. Check actual Expo config and desktop packaging output: web app target, Linux desktop artifacts, no removed platform jobs or manifest requirements. Do not launch GUI applications without the user's request.
 4. Run `npm run typecheck` and `npm run lint`. Use npm formatting scripts; run `npm run format` before committing.
 5. Inspect the merge delta for newly introduced excluded-target wiring. Search results in shared implementations are expected; active entrypoints, jobs, deployment scripts, and user-facing support promises are not.
-6. Report the upstream commit, conflicts resolved, retained fork restrictions, and only verification actually exercised. Do not push or open a PR unless requested. PRs target `Proximyst/getpaseo-paseo`, never upstream.
+6. Report the upstream commit, conflicts resolved, retained fork restrictions, and only verification actually exercised.
+
+## Publish the verified merge
+
+No pull request is required for an upstream sync. Once the merge is committed and verified:
+
+1. Run `git remote get-url --push --all fork`. Proceed only if it lists exactly one URL, and that URL points to `Proximyst/getpaseo-paseo`.
+2. Push directly to the fork's `main` with `git push fork HEAD:refs/heads/main`. Never force-push or push the sync to `origin`.
+3. If `fork/main` advanced and the push is rejected, fetch the fork, integrate its new commits, and verify again before retrying.

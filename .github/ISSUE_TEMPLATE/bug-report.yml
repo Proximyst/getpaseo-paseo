@@ -31,7 +31,7 @@ body:
       description: The shortest sequence that triggers the bug. If you can't reproduce on demand, say so.
       placeholder: |
         1. Open the desktop app
-        2. Pair a daemon
+        2. Connect to a daemon directly or over SSH
         3. Click X
         4. ...
     validations:
@@ -44,7 +44,7 @@ body:
       description: The surface you saw the bug on. Pick the closest match.
       options:
         - Web (browser)
-        - Desktop (Electron)
+        - Linux desktop (Electron)
         - CLI
         - Daemon
         - Other

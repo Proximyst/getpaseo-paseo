@@ -71,50 +71,20 @@ Then use `127.0.0.1:6769` locally. If the remote daemon serves the web UI, open 
 
 Install [Tailscale](https://tailscale.com/download) on the daemon machine and your client machine. Sign in to the same tailnet on both devices.
 
-### 1. Find the daemon machine's Tailscale IP
+### Enable Tailscale for a host
 
-Run this on the daemon machine:
+Set a [daemon password](/docs/configuration#password-authentication) before opening the listener. In the desktop or browser app already connected to the host, open **Settings → your host → Devices**, turn on **Tailscale**, and copy the address.
 
-```bash
-tailscale ip -4
-```
+For a CLI-only setup, run `tailscale ip -4` on the daemon machine. Add that IP and the daemon port to `daemon.listen` as an extra TCP listener, for example `127.0.0.1:6767,100.101.102.103:6767`. Keep your existing main TCP listen address first and run `paseo reload`. If the daemon listens on a Unix socket, switch the main listener to TCP and restart before using this option. See [Listen addresses](/docs/configuration#listen-addresses).
 
-Copy the address it prints. The example below uses `100.101.102.103`.
-
-### 2. Configure the daemon
-
-Open `~/.paseo/config.json` and set `daemon.listen` to the Tailscale IP:
-
-```json
-{
-  "$schema": "https://paseo.sh/schemas/paseo.config.v1.json",
-  "version": 1,
-  "daemon": {
-    "listen": "100.101.102.103:6767"
-  }
-}
-```
-
-Keep the other settings already in the file. If it has a `daemon` object, add `listen` inside that object.
-
-Before binding beyond localhost, configure [Password authentication](/docs/configuration#password-authentication).
-
-Restart the daemon:
-
-```bash
-paseo daemon restart
-```
-
-If Paseo Desktop manages the daemon, use **Settings → your host → Overview → Restart daemon**.
-
-### 3. Connect the client
+### Connect the client
 
 1. Connect Tailscale on your client machine.
-2. Open Paseo and go to **Settings → Add host → Direct connection**.
-3. Enter the Tailscale IP in **Host**, `6767` in **Port**, and the daemon password.
+2. Open the desktop or browser app and go to **Settings → Add host → Direct connection**.
+3. Enter the copied IP in **Host**, the port in **Port**, and the daemon password.
 4. Leave **Use SSL** off for this direct VPN address and select **Connect**.
 
-For the CLI, use `paseo --host 100.101.102.103:6767 ls`. For the browser, you can also enable the daemon's [bundled web UI](/docs/web-ui).
+For the CLI, use `paseo --host 100.101.102.103:6767 ls`. An HTTPS-hosted browser app needs a TLS endpoint; for direct HTTP over Tailscale, enable the daemon's [bundled web UI](/docs/web-ui) and open it at the copied address.
 
 ## Troubleshooting
 
@@ -123,4 +93,4 @@ For the CLI, use `paseo --host 100.101.102.103:6767 ls`. For the browser, you ca
 - **SSH connects but Paseo reports "Password required":** The remote daemon is password-protected. Remove the SSH connection from the host and add it again, this time entering the daemon password in **Daemon password**.
 - **Connection timed out:** Check that Tailscale is connected on both devices and that you used the daemon machine's Tailscale IP.
 - **Connection refused:** Run `paseo daemon status` and confirm the daemon is running on the configured IP and port.
-- **Config change has no effect:** Run `paseo reload`. `daemon.listen` is a startup setting, so restart when the command reports it.
+- **Config change has no effect:** Run `paseo reload`. Restart if the command reports a change to the main listen address.

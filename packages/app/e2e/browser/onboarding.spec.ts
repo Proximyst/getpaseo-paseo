@@ -195,6 +195,7 @@ test("changing the theme keeps the setup window in place on every step", async (
       "Your providers",
       "Add your projects",
       "Let agents use Paseo",
+      "Connect another device",
     ]) {
       if (title !== "Welcome to Paseo") await continueSetup(page);
       await expectSetupStep(page, title);
@@ -383,32 +384,53 @@ test("an existing user only sees setup when they ask for it", async ({ page }) =
   }
 });
 
-test("setup choices carry over to Settings without offering mobile relay pairing", async ({
-  page,
-}, testInfo) => {
+test("setup offers Tailscale without relay or native app stores", async ({ page }, testInfo) => {
   const host = await startSetupHost("settings-carry-over");
 
   try {
     await openAppAsNewUser(page, host);
     await expectSetupStep(page, "Welcome to Paseo");
-    await expect(setupModal(page).getByRole("tab", { name: "Mobile", exact: true })).toHaveCount(0);
-    await goToSetupStep(page, "Orchestration");
-    await expectSetupStep(page, "Let agents use Paseo");
-    await expect(paseoToolsSwitch(setupModal(page))).toBeChecked();
+
+    await test.step("Paseo tools start on in setup and Continue turns them on", async () => {
+      await goToSetupStep(page, "Orchestration");
+      await expectSetupStep(page, "Let agents use Paseo");
+      await expect(paseoToolsSwitch(setupModal(page))).toBeChecked();
+      await continueSetup(page);
+    });
+
+    await test.step("Devices offers Tailscale but not relay or store links", async () => {
+      await expectSetupStep(page, "Connect another device");
+      const setup = setupModal(page);
+      await expect(setup.getByText("Tailscale", { exact: true })).toBeVisible();
+      await page
+        .context()
+        .route("https://paseo.sh/docs/connectivity", (route) =>
+          route.fulfill({ contentType: "text/html", body: "<title>Paseo docs</title>" }),
+        );
+      const popup = page.waitForEvent("popup");
+      await setup.getByRole("link", { name: "Open connectivity documentation" }).click();
+      const docs = await popup;
+      await docs.waitForLoadState("domcontentloaded");
+      expect(docs.url()).toBe("https://paseo.sh/docs/connectivity#tailscale");
+      await docs.close();
+      await expect(setup.getByRole("button", { name: "Relay", exact: true })).toHaveCount(0);
+      await expect(setup.getByText(/^(App Store|Google Play)$/)).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath("5-devices.png") });
+    });
 
     await test.step("Finish closes setup and Settings shows the same Paseo tools value", async () => {
       await finishSetup(page);
       await page.locator('[data-testid="sidebar-settings"]:visible').first().click();
       await openSettingsHostSection(page, host.serverId, "agents");
       await expect(paseoToolsSwitch(page)).toBeChecked();
-      await page.screenshot({ path: testInfo.outputPath("7-settings-agents.png") });
+      await page.screenshot({ path: testInfo.outputPath("6-settings-agents.png") });
     });
   } finally {
     await host.close();
   }
 });
 
-test("with no skills picked, skills read as off and Finish completes setup", async ({ page }) => {
+test("with no skills picked, skills read as off and setup can complete", async ({ page }) => {
   const host = await startSetupHost("no-skills");
 
   try {
@@ -426,6 +448,8 @@ test("with no skills picked, skills read as off and Finish completes setup", asy
     });
     await expect(skillsSwitch).not.toBeChecked();
 
+    await continueSetup(page);
+    await expectSetupStep(page, "Connect another device");
     await finishSetup(page);
   } finally {
     await host.close();

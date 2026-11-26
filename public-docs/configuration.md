@@ -72,9 +72,23 @@ paseo daemon restart
 
 Runtime-safe settings include MCP settings, browser tools, hostnames, CORS origins, trusted proxies, Git process limits, agent and terminal profiles, provider definitions, metadata generation, the app base URL, provider catalog timeout, and the global plugin switch. Removing one of these settings applies its omitted-field behavior; removing a provider removes it from future launches.
 
-Idle runtime cleanup, listen addresses, authentication, worktree allocation, service-proxy addresses, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
+Idle runtime cleanup, the main listen address, authentication, worktree allocation, service-proxy addresses, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
 
-Deployment environment variables and legacy supervisor flags remain authoritative. Reload reports a changed file setting under `overrideControlledPaths` when a launch override prevents it from taking effect. Stop and relaunch the deployment without the override to make the file value authoritative.
+Deployment environment variables and legacy supervisor flags remain authoritative. Reload reports a changed file setting under `overrideControlledPaths` when a launch override prevents it from taking effect. This includes startup settings such as listen addresses, passwords, service-proxy and web UI settings, logging, speech, and voice configuration. List settings such as hostnames and CORS origins still append across sources, so values from `config.json` continue to apply. Stop and relaunch the deployment without the override to make the file value authoritative.
+
+## Listen addresses
+
+Set `daemon.listen` to one TCP address or a comma-separated list of TCP addresses, such as
+`127.0.0.1:6767,100.101.102.103:6767`, or set it to one Unix socket path. A socket path cannot
+be combined with other listeners and may contain commas. `PASEO_LISTEN` and `--listen` accept
+the same forms.
+
+The first address is the main listener. Restart after changing it. Run `paseo reload` to
+apply changes to extra TCP listeners while the daemon is running. The daemon retries
+extra addresses that are unavailable and reports their state in `paseo daemon status`.
+Removing an extra address disconnects clients using it.
+
+Use a single address before downgrading to a daemon version that predates listen lists.
 
 ## Agent providers
 

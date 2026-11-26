@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
 import { useDirectoryDemand } from "@/hooks/use-directory-demand";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -21,6 +22,7 @@ function OnboardingGate() {
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
   const hasHydratedWorkspaces = useHasHydratedWorkspaces(serverId);
   const projectRootPaths = useProjectRootPaths(serverId);
+  const isCompact = useIsCompactFormFactor();
   const hasProjects = projectRootPaths.length > 0;
 
   // Without demand nothing may ask a fresh host for its workspaces, and the gate would wait forever.
@@ -29,9 +31,9 @@ function OnboardingGate() {
   useEffect(() => {
     model.applySetupHost(
       serverId ? { serverId, isConnected, hasHydratedWorkspaces, hasProjects } : null,
-      { includePhoneStep: false },
+      { includeDevicesStep: !isCompact },
     );
-  }, [model, serverId, isConnected, hasHydratedWorkspaces, hasProjects]);
+  }, [model, serverId, isConnected, hasHydratedWorkspaces, hasProjects, isCompact]);
 
   if (state.status !== "open") return null;
   return <OnboardingModal model={model} state={state} />;

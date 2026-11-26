@@ -1,12 +1,17 @@
-export type OnboardingStepId = "appearance" | "providers" | "projects" | "orchestration" | "phone";
+export type OnboardingStepId =
+  | "appearance"
+  | "providers"
+  | "projects"
+  | "orchestration"
+  | "devices";
 
-const STEPS_WITHOUT_PHONE: readonly OnboardingStepId[] = [
+const STEPS_WITHOUT_DEVICES: readonly OnboardingStepId[] = [
   "appearance",
   "providers",
   "projects",
   "orchestration",
 ];
-const STEPS_WITH_PHONE: readonly OnboardingStepId[] = [...STEPS_WITHOUT_PHONE, "phone"];
+const STEPS_WITH_DEVICES: readonly OnboardingStepId[] = [...STEPS_WITHOUT_DEVICES, "devices"];
 
 export interface OnboardingCompletionStorage {
   isCompleted(): Promise<boolean>;
@@ -22,8 +27,8 @@ export interface OnboardingSetupHost {
 }
 
 export interface OnboardingStepOptions {
-  /** False when the client is itself a phone, where pairing a phone makes no sense. */
-  includePhoneStep: boolean;
+  /** Keep setup shorter in the compact layout; Devices is still in host settings. */
+  includeDevicesStep: boolean;
 }
 
 export type OnboardingState =
@@ -82,7 +87,7 @@ export function createOnboardingModel(input: {
     return {
       status: "open",
       serverId,
-      steps: options.includePhoneStep ? STEPS_WITH_PHONE : STEPS_WITHOUT_PHONE,
+      steps: options.includeDevicesStep ? STEPS_WITH_DEVICES : STEPS_WITHOUT_DEVICES,
       stepIndex: 0,
       visit: visits,
     };

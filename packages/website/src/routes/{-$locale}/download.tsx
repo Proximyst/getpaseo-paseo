@@ -150,14 +150,6 @@ function Download() {
                 : "npm install -g @getpaseo/cli && paseo"}
             </CodeBlock>
           </PlatformRow>
-
-          <PlatformRow icon={TerminalIcon} label="Nix">
-            <CodeBlock size="sm">
-              {onBeta
-                ? `nix run github:getpaseo/paseo/v${version}`
-                : "nix run github:getpaseo/paseo"}
-            </CodeBlock>
-          </PlatformRow>
         </div>
       </section>
 

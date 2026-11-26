@@ -76,14 +76,12 @@ to `ProviderEvent` objects before publishing it.
 ## Launch the provider CLI
 
 Use `spawnProcess` and `execCommand` from `@getpaseo/plugin/server` for process transports
-and CLI probes. Both handle Windows `.cmd`/`.bat` launchers and quote shell arguments.
-Raw Node `spawn` and `execFile` reject those launchers on Windows.
+and CLI probes. Both quote shell arguments when a shell is used.
 
 The daemon supplies `request.launch` with the resolved command, argument prefix, and complete
 environment. Pass that environment explicitly; the helpers do not apply daemon environment policy.
 Keep the process lifecycle and protocol deadlines inside your provider. End stdin for graceful
-shutdown; use `terminateProcess(child)` for a forced stop. It kills the process tree on Windows,
-including the CLI behind a command-script launcher. Bound your final wait for closed streams.
+shutdown; use `terminateProcess(child)` for a forced stop. Bound your final wait for closed streams.
 
 ```ts
 import { spawnProcess, execCommand } from "@getpaseo/plugin/server";
@@ -98,6 +96,31 @@ const { stdout } = await execCommand(launch.command, [...launch.args, "--version
   timeout: 5000,
 });
 ```
+
+### Run sessions behind a launch wrap
+
+A [launch wrap](./hooks.md#launch-wraps) from `agent.open.before` reaches your provider as
+`session.open`'s `config.wrap`. To support it:
+
+1. Set `launchWrap: true` on the registration. Paseo publishes `launchWrap: true` in the provider
+   snapshot, so plugins can choose your provider before it connects.
+2. Add `session.launch_wrap` to the connection's supported capabilities. Paseo sends `config.wrap`
+   only to a connection that negotiated it, and fails a wrapped open on any other connection.
+3. Start the session's process with the `wrap` option. `spawnProcess` then starts
+   `[...wrap, command, ...args]`:
+
+```ts
+const child = spawnProcess(launch.command, [...launch.args, "serve"], {
+  wrap: input.config.wrap,
+  env: launch.env,
+  cwd: input.config.cwd,
+  stdio: "pipe",
+});
+```
+
+Start every process that does the session's work behind the wrap. If one process serves several
+sessions, start a separate one for a wrapped session. `runAcpProvider({ command })` does all of this
+for an ACP agent.
 
 ## Return models, modes, and thinking options
 
@@ -134,6 +157,47 @@ Return an empty array for a category the agent does not expose. The selected `mo
 
 The catalog describes choices available before a session exists. Session-specific controls come
 later through `session.config`.
+
+### Stop a request Paseo cancels
+
+Paseo gives each catalog refresh a deadline. When it stops waiting for a request, it sends
+`request.cancel` with that request's `requestId`. Stop the work and release what it started, such
+as a process you spawned to read the catalog. Paseo ignores any event you emit for that request
+afterward. Sessions on the same connection keep running.
+
+Add `request.cancel` to your supported capabilities. Paseo sends the input only to a connection
+that offers it:
+
+```ts
+const pending = new Map<string, AbortController>();
+
+if (input.type === "catalog") {
+  const controller = new AbortController();
+  pending.set(input.requestId, controller);
+  void readCatalog({ signal: controller.signal })
+    .then(
+      (catalog) => {
+        if (!controller.signal.aborted)
+          emit({ type: "catalog", requestId: input.requestId, catalog });
+      },
+      (error) => {
+        if (!controller.signal.aborted)
+          emit({
+            type: "request.failed",
+            requestId: input.requestId,
+            error: { message: String(error) },
+          });
+      },
+    )
+    .finally(() => pending.delete(input.requestId));
+}
+if (input.type === "request.cancel") {
+  pending.get(input.requestId)?.abort();
+}
+```
+
+A cancel can arrive after the request finished. Ignore a `requestId` you no longer track.
+`runAcpProvider` offers the capability and stops the catalog probe's process.
 
 ## Open a session
 

@@ -52,12 +52,12 @@ describe("onboarding model", () => {
   it("opens on the appearance step for a connected host with no projects", async () => {
     const model = await openModel();
 
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
 
     expect(model.getState()).toMatchObject({
       status: "open",
       serverId: "local",
-      steps: ["appearance", "providers", "projects", "orchestration", "phone"],
+      steps: ["appearance", "providers", "projects", "orchestration", "devices"],
       stepIndex: 0,
     });
   });
@@ -65,23 +65,23 @@ describe("onboarding model", () => {
   it("waits until the host is connected and its workspaces are hydrated", async () => {
     const model = await openModel();
 
-    model.applySetupHost(null, { includePhoneStep: true });
-    model.applySetupHost({ ...FRESH_HOST, isConnected: false }, { includePhoneStep: true });
+    model.applySetupHost(null, { includeDevicesStep: true });
+    model.applySetupHost({ ...FRESH_HOST, isConnected: false }, { includeDevicesStep: true });
     model.applySetupHost(
       { ...FRESH_HOST, hasHydratedWorkspaces: false },
-      { includePhoneStep: true },
+      { includeDevicesStep: true },
     );
     expect(model.getState()).toEqual({ status: "deciding" });
 
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
     expect(model.getState().status).toBe("open");
   });
 
   it("stays hidden for a host that already has projects, even after they are removed", async () => {
     const model = await openModel();
 
-    model.applySetupHost({ ...FRESH_HOST, hasProjects: true }, { includePhoneStep: true });
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    model.applySetupHost({ ...FRESH_HOST, hasProjects: true }, { includeDevicesStep: true });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
 
     expect(model.getState()).toEqual({ status: "hidden" });
   });
@@ -89,7 +89,7 @@ describe("onboarding model", () => {
   it("stays hidden once setup was completed on this client", async () => {
     const model = await openModel(new MemoryCompletionStorage(true));
 
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
 
     expect(model.getState()).toEqual({ status: "hidden" });
   });
@@ -97,7 +97,7 @@ describe("onboarding model", () => {
   it("decides only after the completion record has loaded", async () => {
     const model = createOnboardingModel({ storage: new MemoryCompletionStorage(true) });
 
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
     expect(model.getState()).toEqual({ status: "deciding" });
 
     await model.ready;
@@ -106,19 +106,19 @@ describe("onboarding model", () => {
 
   it("keeps the modal open when the host gains its first project during setup", async () => {
     const model = await openModel();
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
     advance(model);
     advance(model);
 
-    model.applySetupHost({ ...FRESH_HOST, hasProjects: true }, { includePhoneStep: true });
+    model.applySetupHost({ ...FRESH_HOST, hasProjects: true }, { includeDevicesStep: true });
 
     expect(model.getState()).toMatchObject({ status: "open", stepIndex: 2 });
   });
 
-  it("omits the phone step when the client is a phone", async () => {
+  it("omits the Devices step in compact setup", async () => {
     const model = await openModel();
 
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: false });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: false });
 
     expect(model.getState()).toMatchObject({
       steps: ["appearance", "providers", "projects", "orchestration"],
@@ -127,7 +127,7 @@ describe("onboarding model", () => {
 
   it("moves between steps without leaving the step list", async () => {
     const model = await openModel();
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: false });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: false });
 
     model.back();
     expect(model.getState()).toMatchObject({ stepIndex: 0 });
@@ -143,7 +143,7 @@ describe("onboarding model", () => {
 
   it("ignores a late advance from a step visit the user already left", async () => {
     const model = await openModel(new MemoryCompletionStorage(true));
-    model.reopen("local", { includePhoneStep: true });
+    model.reopen("local", { includeDevicesStep: true });
     model.goTo("projects");
 
     // Projects are still being added when the user leaves Projects and comes back.
@@ -155,7 +155,7 @@ describe("onboarding model", () => {
 
     // Or closes setup, opens it again and returns to Projects before the add finishes.
     await model.complete();
-    model.reopen("local", { includePhoneStep: true });
+    model.reopen("local", { includeDevicesStep: true });
     model.goTo("projects");
     model.next(addingFrom);
     expect(model.getState()).toMatchObject({ status: "open", stepIndex: 2 });
@@ -164,7 +164,7 @@ describe("onboarding model", () => {
   it("moving on from the last step finishes setup, unless the user left that step first", async () => {
     const storage = new MemoryCompletionStorage();
     const model = await openModel(storage);
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: false });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: false });
     model.goTo("orchestration");
 
     // Finish is applying choices when the user goes back to Projects.
@@ -183,22 +183,22 @@ describe("onboarding model", () => {
   it("records completion when setup closes, so it does not open again", async () => {
     const storage = new MemoryCompletionStorage();
     const model = await openModel(storage);
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
 
     await model.complete();
 
     expect(model.getState()).toEqual({ status: "hidden" });
     expect(storage.completed).toBe(true);
     const relaunched = await openModel(storage);
-    relaunched.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    relaunched.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
     expect(relaunched.getState()).toEqual({ status: "hidden" });
   });
 
   it("reopens on the first step for an existing user", async () => {
     const model = await openModel(new MemoryCompletionStorage(true));
-    model.applySetupHost({ ...FRESH_HOST, hasProjects: true }, { includePhoneStep: true });
+    model.applySetupHost({ ...FRESH_HOST, hasProjects: true }, { includeDevicesStep: true });
 
-    model.reopen("local", { includePhoneStep: true });
+    model.reopen("local", { includeDevicesStep: true });
 
     expect(model.getState()).toMatchObject({ status: "open", serverId: "local", stepIndex: 0 });
   });
@@ -211,7 +211,7 @@ describe("onboarding model", () => {
       seen.push(state.status === "open" ? `open:${state.stepIndex}` : state.status);
     });
 
-    model.applySetupHost(FRESH_HOST, { includePhoneStep: true });
+    model.applySetupHost(FRESH_HOST, { includeDevicesStep: true });
     advance(model);
     await model.complete();
 

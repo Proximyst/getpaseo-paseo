@@ -69,50 +69,20 @@ ssh -N -L 6769:127.0.0.1:6767 user@host
 
 在 daemon 和客户端所在的机器上安装 [Tailscale](https://tailscale.com/download)，并登录同一个 tailnet。
 
-### 1. 找到 daemon 机器的 Tailscale IP {#1-find-the-daemon-machines-tailscale-ip}
+### 为主机启用 Tailscale {#enable-tailscale-for-a-host}
 
-在 daemon 机器上运行：
+开放监听地址之前，请先设置 [daemon 密码](/docs/configuration#password-authentication)。在已连接到主机的桌面端或网页版中，打开 **设置 → 你的主机 → 设备**，开启 **Tailscale** 并复制地址。
 
-```bash
-tailscale ip -4
-```
+如果只使用 CLI，请在 daemon 所在机器上运行 `tailscale ip -4`。将该 IP 和 daemon 端口作为额外的 TCP 监听地址添加到 `daemon.listen`，例如 `127.0.0.1:6767,100.101.102.103:6767`。将现有的主 TCP 监听地址保留在首位，再运行 `paseo reload`。如果 daemon 监听的是 Unix 套接字，请先将主监听地址切换到 TCP 并重启。参见[监听地址](/docs/configuration#listen-addresses)。
 
-复制它打印出的地址。下面的示例使用 `100.101.102.103`。
-
-### 2. 配置 daemon {#2-configure-the-daemon}
-
-打开 `~/.paseo/config.json`，把 `daemon.listen` 设置为 Tailscale IP：
-
-```json
-{
-  "$schema": "https://paseo.sh/schemas/paseo.config.v1.json",
-  "version": 1,
-  "daemon": {
-    "listen": "100.101.102.103:6767"
-  }
-}
-```
-
-保留文件中已有的其他设置。如果文件中已有 `daemon` 对象，请把 `listen` 加到该对象中。
-
-在绑定到 localhost 之外的地址之前，请配置[密码认证](/docs/configuration#password-authentication)。
-
-重启 daemon：
-
-```bash
-paseo daemon restart
-```
-
-如果 daemon 由 Paseo 桌面端管理，请使用 **设置 → 你的主机 → 概览 → 重启 Daemon**。
-
-### 3. 连接客户端 {#3-connect-the-client}
+### 连接客户端 {#connect-the-client}
 
 1. 在客户端机器上连接 Tailscale。
-2. 打开 Paseo，进入 **设置 → 添加主机 → 直接连接**。
-3. 输入 Tailscale IP、端口 `6767` 和 daemon 密码。
+2. 在桌面端或网页版中打开 **设置 → 添加主机 → 直接连接**。
+3. 在 **Host** 中输入复制的 IP，在 **端口** 中输入端口号，并输入 daemon 密码。
 4. 保持 **使用 SSL** 关闭，然后选择 **连接**。
 
-如需通过 CLI 连接，请运行 `paseo --host 100.101.102.103:6767 ls`。如需在浏览器中使用，也可以启用 daemon 的[内置 Web UI](/docs/web-ui)。
+如需通过 CLI 连接，请运行 `paseo --host 100.101.102.103:6767 ls`。通过 HTTPS 提供的浏览器应用需要 TLS 端点；如果要通过 Tailscale 直接使用 HTTP，请启用 daemon 的[内置 Web UI](/docs/web-ui)，然后在浏览器中打开复制的地址。
 
 ## 故障排查 {#troubleshooting}
 
@@ -121,4 +91,4 @@ paseo daemon restart
 - **SSH 能连上但 Paseo 报告 “Password required”**：远程 daemon 受密码保护。从主机中移除这个 SSH 连接并重新添加，这次在 **守护进程密码** 中输入 daemon 密码。
 - **连接超时**：检查两台设备上的 Tailscale 是否都已连接，以及你使用的是否是 daemon 机器的 Tailscale IP。
 - **连接被拒绝**：运行 `paseo daemon status`，确认 daemon 正在配置的 IP 和端口上运行。
-- **配置修改没有生效**：运行 `paseo reload`。`daemon.listen` 是启动时生效的设置，所以当命令提示时请重启。
+- **配置修改没有生效**：运行 `paseo reload`。如果命令报告主监听地址发生变化，请重启。

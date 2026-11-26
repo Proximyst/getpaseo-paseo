@@ -410,7 +410,7 @@
     },
     "plugins": {
       "title": "让 Paseo 修改 Paseo",
-      "description": "Paseo 里的 Agent 可以修改界面，无需重启。",
+      "description": "插件只需在你的服务器上构建或安装一次，即可在 <desktop>Linux 桌面端</desktop>和 <web>Web 端</web>运行，无需重启。",
       "request": "在侧边栏加一个面板，列出等待我审查的 PR。",
       "plan": "我会把它做成本地插件并安装。",
       "done": "审查队列已出现在你的侧边栏。",
