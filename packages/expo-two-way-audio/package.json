@@ -19,6 +19,7 @@
   "types": "build/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "build:clean": "node -e \"require('node:fs').rmSync('build', { recursive: true, force: true })\" && npm run build",
     "format": "oxfmt --check .",
     "format:fix": "oxfmt .",
     "typecheck": "tsgo --noEmit"

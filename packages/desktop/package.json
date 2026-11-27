@@ -18,7 +18,8 @@
   ],
   "main": "dist/main.js",
   "scripts": {
-    "build": "node scripts/check-platform.js && npm --prefix ../.. run build:server:clean && npm run build:main && electron-builder --linux --config electron-builder.yml",
+    "build": "npm --prefix ../.. run build:desktop --",
+    "build:package": "node ../../scripts/clean-package-dist.mjs && npm run build:main && electron-builder --linux --config electron-builder.yml",
     "build:main": "node scripts/check-platform.js && tsc -p tsconfig.json",
     "capture-harness": "npm run build:main && ./capture-harness/run.sh",
     "dev": "./scripts/dev.sh",

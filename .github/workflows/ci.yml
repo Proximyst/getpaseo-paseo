@@ -105,16 +105,16 @@ jobs:
         run: node --test scripts/oxlint/paseo-plugin.test.mjs
 
       - name: Build relay
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && (needs.changes.outputs.full != 'false' || needs.changes.outputs.relay != 'false') }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && (needs.changes.outputs.full != 'false' || needs.changes.outputs.relay != 'false' || needs.changes.outputs.sdk != 'false') }}
         run: npm run build:relay
 
       - name: Run relay tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' && (needs.changes.outputs.full != 'false' || needs.changes.outputs.relay != 'false') }}
         run: npm run test --workspace=@getpaseo/relay
 
-      - name: Build client dependencies
+      - name: Build protocol and client SDK
         if: ${{ !cancelled() && steps.install.outcome == 'success' && (needs.changes.outputs.full != 'false' || needs.changes.outputs.sdk != 'false') }}
-        run: npm run build:relay && npm run build:client
+        run: npm run build:protocol && npm run build:dist --workspace=@getpaseo/client
 
       - name: Build plugin SDK
         if: ${{ !cancelled() && steps.install.outcome == 'success' && (needs.changes.outputs.full != 'false' || needs.changes.outputs.sdk != 'false') }}
@@ -236,7 +236,7 @@ jobs:
         run: node scripts/npm-retry.mjs install -g @anthropic-ai/claude-code opencode-ai
 
       - name: Build server dependencies
-        run: npm run build:server-deps
+        run: npm run build:shared-deps
 
       - name: Run server tests
         if: ${{ needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' }}

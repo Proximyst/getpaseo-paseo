@@ -406,7 +406,8 @@ test("quality preserves commands and routes each domain independently after fail
     ],
     relay: ["npm run build:relay", "npm run test --workspace=@getpaseo/relay"],
     sdk: [
-      "npm run build:relay && npm run build:client",
+      "npm run build:relay",
+      "npm run build:protocol && npm run build:dist --workspace=@getpaseo/client",
       "npm run build:plugin",
       "npm run test --workspace=@getpaseo/plugin",
       "npm run test --workspace=@getpaseo/protocol",
@@ -416,10 +417,6 @@ test("quality preserves commands and routes each domain independently after fail
     ],
   };
   const checks = [...quality.matchAll(/        if: \$\{\{ (.+) \}\}\n        run: (.+)/g)];
-  assert.deepEqual(
-    checks.map(([, , command]) => command),
-    Object.values(commands).flat(),
-  );
   const domains = Object.keys(commands);
   function accepts(expression, outputs, { cancelled = false, installed = true } = {}) {
     // Prior checks have failed: success() is false. Explicit !cancelled() must
@@ -442,9 +439,23 @@ test("quality preserves commands and routes each domain independently after fail
       assert.equal(accepts(expression, outputs), commands[selected].includes(command), command);
     }
   }
+  const allCommands = [...new Set(Object.values(commands).flat())].sort();
+  for (const [outputs, expected] of [
+    [
+      { ...disabled, relay: "true", sdk: "true" },
+      [...new Set([...commands.relay, ...commands.sdk])].sort(),
+    ],
+    [{ ...disabled, full: "true" }, allCommands],
+    [{}, allCommands],
+  ]) {
+    const selected = checks
+      .filter(([, expression]) => accepts(expression, outputs))
+      .map(([, , command]) => command);
+    assert.ok(selected.indexOf(commands.relay[0]) < selected.indexOf(commands.relay[1]));
+    assert.ok(selected.indexOf(commands.relay[0]) < selected.indexOf(commands.sdk[1]));
+    assert.deepEqual(selected.sort(), expected);
+  }
   for (const [, expression] of checks) {
-    assert.equal(accepts(expression, { ...disabled, full: "true" }), true);
-    assert.equal(accepts(expression, {}), true, "missing routing outputs fail open");
     assert.equal(accepts(expression, {}, { cancelled: true }), false);
     assert.equal(accepts(expression, {}, { installed: false }), false);
   }

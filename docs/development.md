@@ -487,13 +487,21 @@ Package imports resolve through package exports to compiled `dist/` output, not 
 Use the named root build targets instead of remembering workspace dependency chains:
 
 ```bash
-npm run build:client       # protocol -> client
-npm run build:server-deps  # highlight -> relay -> protocol -> client
-npm run build:server       # server-deps -> server -> cli
-npm run build:app-deps     # highlight -> protocol -> client -> expo-two-way-audio
+npm run build:client       # protocol and relay, then client
+npm run build:shared-deps  # client stack, plugin SDK, and highlight
+npm run build:server       # shared dependencies, then daemon and CLI
+npm run build:app-deps     # shared dependencies and browser audio
 ```
 
 Use `npm run build:server` whenever you have changed any daemon/server-facing package and need clean cross-package types or runtime behavior.
+
+Use the `:clean` variants when a file was deleted or renamed: an ordinary TypeScript build does
+not remove outputs from sources that no longer exist. The desktop build prepares the shared
+workspaces once for both the renderer and the packaged daemon.
+
+The protocol and daemon emit with the native TypeScript compiler (`tsgo`). Keep the `typescript`
+package for tools that import the JavaScript compiler API. The emitted package paths and
+declarations are still the contract for workspace consumers.
 
 The app Metro config disables Watchman and uses Metro's node crawler for exports. Keep that invariant unless you have verified production app exports on machines with and without Watchman installed; distro Watchman builds can differ in capabilities and change Metro's crawl behavior.
 
@@ -654,6 +662,8 @@ Do NOT use browser history (back/forward). Always navigate by clicking UI elemen
 
 `packages/app` exports a single-page Expo web app and deploys the `dist/`
 directory to Cloudflare Pages with `npm run deploy:web --workspace=@getpaseo/app`.
+CI builds the workspace dependencies before typechecking, then runs `build:web:export` and
+`deploy:web:upload` separately so the deployment does not rebuild those dependencies.
 
 PWA install metadata lives in `packages/app/public/manifest.json` and is linked
 from `packages/app/public/index.html`. Keep the install icons in `public/` so
