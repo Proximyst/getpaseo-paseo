@@ -299,6 +299,7 @@ export const fr: TranslationResources = {
     archived: {
       callout: "Cet agent est archivé",
       unarchive: "Désarchiver",
+      unarchiving: "Désarchivage...",
     },
   },
   sessions: {
@@ -660,6 +661,24 @@ export const fr: TranslationResources = {
         failedToLoad: "Impossible de charger la page",
         invalidUrl: "URL du navigateur invalide",
         unsupportedProtocol: "URL bloquée, protocole non pris en charge : {{protocol}}",
+      },
+      routing: {
+        tooltipHost: "Navigation via {{hostName}}. Cliquez pour naviguer en local.",
+        tooltipLocal: "Navigation locale. Cliquez pour naviguer via {{hostName}}.",
+        switchToLocal: "Basculer le routage du navigateur de {{hostName}} vers Local",
+        switchToHost: "Basculer le routage du navigateur de Local vers {{hostName}}",
+      },
+      proxy: {
+        connecting: "Connexion à {{hostName}}...",
+        reconnecting: "Reconnexion à {{hostName}}...",
+        updateTitle: "Mettez à jour {{hostName}} pour naviguer via cet hôte",
+        updateDescription: "Cet hôte ne prend pas encore en charge le proxy du navigateur.",
+        routedTitle: "Le proxy du navigateur n’est pas disponible pour les hôtes routés",
+        routedDescription: "Connectez-vous directement à cet hôte ou naviguez en local.",
+        offlineTitle: "{{hostName}} est hors ligne",
+        offlineDescription: "Attendez la reconnexion de l’hôte ou naviguez en local.",
+        errorTitle: "Impossible de connecter le proxy du navigateur",
+        browseLocally: "Naviguer en local",
       },
     },
     terminal: {
@@ -2450,7 +2469,7 @@ export const fr: TranslationResources = {
     title: "Paramètres",
     loading: "Chargement des paramètres…",
     groups: {
-      app: "Application",
+      app: "Cet appareil",
       host: "Hôte",
     },
     hostPicker: {
@@ -2468,7 +2487,9 @@ export const fr: TranslationResources = {
     groupInfo: "À propos de {{title}}",
     sections: {
       general: "Général",
+      hosts: "Hôtes",
       chat: "Discussion",
+      chatAndPanes: "Chat et panneaux",
       appearance: "Apparence",
       sidebar: "Barre latérale",
       terminal: "Terminal",
@@ -2481,6 +2502,16 @@ export const fr: TranslationResources = {
       permissions: "Autorisations",
       diagnostics: "Diagnostic",
       about: "À propos",
+    },
+    clientHosts: {
+      title: "Hôtes enregistrés",
+      info: "Hôtes auxquels cet appareil se connecte. Les noms, icônes, badges et routes ici ne concernent que cet appareil.",
+      backToHosts: "Retour aux hôtes",
+      routesTitle: "Comment cet appareil se connecte",
+      routesInfo:
+        "Routes enregistrées utilisées par cet appareil pour joindre cet hôte. Paseo choisit la plus rapide disponible.",
+      addRoute: "Ajouter une route",
+      activeRoute: "Active",
     },
     layout: en.settings.layout,
     editor: {
@@ -2498,17 +2529,50 @@ export const fr: TranslationResources = {
     },
     notifications: {
       title: "Notifications",
-      enabled: "Notifications activées",
-      disabled: "Notifications désactivées",
-      enabledHint: "Contrôlez les notifications de cette installation de Paseo.",
-      disable: "Désactiver les notifications",
-      enable: "Activer les notifications",
-      saveFailed: "Impossible de modifier les paramètres de notification. Réessayez.",
-      systemSettings: "Autorisation système des notifications",
-      nativeDisableHint:
-        "Pour tout bloquer immédiatement, désactivez l’autorisation des notifications de Paseo dans les réglages système. Les hôtes hors ligne ou anciens et les notifications déjà envoyées peuvent encore transmettre des notifications. Rétablissez cette autorisation lors de la réactivation.",
-      openSettings: "Ouvrir les réglages système",
-      openSettingsFailed: "Impossible d’ouvrir les réglages système.",
+      enabled: {
+        label: "Activer les notifications",
+        description: "Recevoir les notifications des agents, terminaux et plugins sur cet appareil",
+        pausedDescription:
+          "Toutes les notifications, y compris celles des plugins, sont suspendues sur cet appareil",
+      },
+      events: {
+        title: "Événements",
+        agentPermission: {
+          label: "L’agent demande une autorisation",
+          description: "Approbations, plans et questions",
+        },
+        agentError: {
+          label: "Erreur de l’agent",
+          description: "Quand un agent s’arrête avec une erreur",
+        },
+        agentFinished: {
+          label: "L’agent a terminé",
+          description: "Quand un agent termine un tour",
+        },
+        terminalNeedsInput: {
+          label: "Le terminal attend une saisie",
+          description: "Quand une commande de terminal attend une saisie",
+        },
+        terminalFinished: {
+          label: "Le terminal a terminé",
+          description: "Quand une commande de terminal se termine",
+        },
+      },
+      plugins: {
+        title: "Plugins",
+        enabled: {
+          label: "Notifications des plugins",
+          description: "Autoriser les plugins installés à envoyer des notifications",
+        },
+        empty:
+          "Les plugins installés apparaissent ici pour les mettre en sourdine individuellement",
+      },
+      legacyHostTitle: "Mettez à jour l’hôte pour les préférences push",
+      legacyHostHint:
+        "Mettez à jour les hôtes connectés pour synchroniser les préférences de notifications push de cet appareil",
+      desktop: {
+        title: "Système",
+      },
       permission: "Autorisation des notifications",
       refreshAccessibility: "Actualiser l’autorisation des notifications",
       playSound: "Émettre un son",
@@ -2526,6 +2590,7 @@ export const fr: TranslationResources = {
       projects: "Projets",
       connections: "Connexions",
       agents: "Agents",
+      tools: "Outils et instructions",
       agentProfiles: "Profils d’agent",
       metadata: "Métadonnées",
       voice: "Voix",
@@ -2535,6 +2600,7 @@ export const fr: TranslationResources = {
       terminals: "Terminaux",
       plugins: "Plugins",
       host: "Aperçu",
+      daemon: "Daemon",
     },
     plugins: pluginSettings.fr,
     metadataGeneration: {
@@ -3088,6 +3154,10 @@ export const fr: TranslationResources = {
           delete: "Supprimer le skill",
         },
       },
+      tools: {
+        instructionsTitle: "Instructions",
+        toolsTitle: "Outils des agents",
+      },
       orchestration: {
         title: "Orchestration",
         unavailable: "Connectez-vous à cet hôte pour gérer l’orchestration",
@@ -3155,6 +3225,8 @@ export const fr: TranslationResources = {
       },
       agentProfiles: {
         sectionTitle: "Profils d’agent",
+        sectionDescription:
+          "Enregistrez des réglages d’agent à sélectionner rapidement et utilisables par les agents pour déléguer du travail",
         unavailable: "Connectez-vous à cet hôte pour gérer les profils d’agent",
         unsupported: "Le daemon de cet hôte ne prend pas encore en charge les profils d’agent",
         emptyState:
@@ -3179,6 +3251,10 @@ export const fr: TranslationResources = {
         featuresLabel: "Fonctionnalités",
         featureCount: "{{count}} fonctionnalités",
         featureCountOne: "{{count}} fonctionnalité",
+        systemPromptLabel: "Prompt système",
+        systemPromptPlaceholder:
+          "Concentre-toi sur la mise en page, l’accessibilité et les jetons de design.",
+        systemPromptHint: "S’applique uniquement aux nouveaux agents",
         notesLabel: "Quand l’utiliser",
         notesPlaceholder:
           "À utiliser pour le travail sur l’UI : composants, mise en page et design tokens.",
@@ -3217,6 +3293,7 @@ export const fr: TranslationResources = {
         },
       },
       daemon: {
+        runtimeTitle: "Exécution des agents",
         rename: {
           editLabel: "Modifier le libellé",
           title: "Renommer l’hôte",

@@ -16,6 +16,7 @@ import {
   parseGitRemoteLocation,
 } from "@getpaseo/protocol/git-remote";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
+import { listGitHubFetchRemotes } from "../utils/git-fetch-remotes.js";
 import { runGitCommand } from "../utils/run-git-command.js";
 import {
   buildForkLocalBranchName,
@@ -2465,7 +2466,18 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
             "{}",
             input.repository ? "github.com" : undefined,
           );
-          return toPullRequestCheckoutTarget(parsed);
+          const target = toPullRequestCheckoutTarget(parsed);
+          // Explicit inbox and review checkouts select an exact base remote at the
+          // checkout boundary; only implicit repository lookups need candidate refs here.
+          if (!input.repository) {
+            const host = (await resolveRepoHostCached(input.cwd)) ?? "github.com";
+            const remoteNames = await listRemotesForRepository(input.cwd, host, `${owner}/${name}`);
+            target.checkoutRefs = buildPullHeadCheckoutRefs(
+              target.number,
+              remoteNames.length > 0 ? remoteNames : undefined,
+            );
+          }
+          return target;
         },
       });
     },
@@ -3640,6 +3652,22 @@ async function resolveOriginRepositoryPath(cwd: string): Promise<string | null> 
   return location ? (parseGitHubRemoteIdentity(location.path)?.repo ?? null) : null;
 }
 
+async function listRemotesForRepository(
+  cwd: string,
+  host: string,
+  repo: string,
+): Promise<string[]> {
+  // A fork has its own PR numbers. Match the repository actually queried, with the
+  // legacy origin/upstream fallback only when no repository remote can be identified.
+  const remotes = await listGitHubFetchRemotes(cwd, host).catch(() => []);
+  const wanted = repo.toLowerCase();
+  const matches: string[] = [];
+  for (const { name, repository } of remotes) {
+    if (repository === wanted) matches.push(name);
+  }
+  return matches;
+}
+
 interface GitHubRepoViewOptions {
   cwd: string;
   /** owner/name to ask about; `gh` picks the default repository for the directory when absent. */
@@ -3955,10 +3983,6 @@ function toPullRequestCheckoutTarget(
     headRefName: pullRequest.headRefName,
     ...(pullRequest.baseRefOid ? { baseSha: pullRequest.baseRefOid } : {}),
     ...(pullRequest.headRefOid ? { headSha: pullRequest.headRefOid } : {}),
-    checkoutRefs: [
-      { remoteName: "origin", remoteRef: `refs/pull/${pullRequest.number}/head` },
-      { remoteName: "upstream", remoteRef: `refs/pull/${pullRequest.number}/head` },
-    ],
     headOwnerLogin: pullRequest.headRepositoryOwner?.login || null,
     headRepositorySshUrl: pullRequest.headRepository?.sshUrl || null,
     headRepositoryUrl: pullRequest.headRepository?.url || null,

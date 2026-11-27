@@ -294,6 +294,7 @@ export const zhCN: TranslationResources = {
     archived: {
       callout: "此 Agent 已归档",
       unarchive: "取消归档",
+      unarchiving: "正在取消归档...",
     },
   },
   sessions: {
@@ -654,6 +655,24 @@ export const zhCN: TranslationResources = {
         failedToLoad: "页面加载失败",
         invalidUrl: "浏览器 URL 无效",
         unsupportedProtocol: "已阻止不支持的浏览器 URL：{{protocol}}",
+      },
+      routing: {
+        tooltipHost: "正在通过 {{hostName}} 浏览。点击切换为本地浏览。",
+        tooltipLocal: "正在本地浏览。点击切换为通过 {{hostName}} 浏览。",
+        switchToLocal: "将浏览器路由从 {{hostName}} 切换为本地",
+        switchToHost: "将浏览器路由从本地切换为 {{hostName}}",
+      },
+      proxy: {
+        connecting: "正在连接到 {{hostName}}...",
+        reconnecting: "正在重新连接到 {{hostName}}...",
+        updateTitle: "请更新 {{hostName}} 以通过此主机浏览",
+        updateDescription: "此主机尚不支持浏览器代理。",
+        routedTitle: "路由主机不支持浏览器代理",
+        routedDescription: "请直接连接到此主机，或改为本地浏览。",
+        offlineTitle: "{{hostName}} 已离线",
+        offlineDescription: "请等待主机重新连接，或改为本地浏览。",
+        errorTitle: "无法连接浏览器代理",
+        browseLocally: "本地浏览",
       },
     },
     terminal: {
@@ -2375,7 +2394,7 @@ export const zhCN: TranslationResources = {
     title: "设置",
     loading: "正在加载设置...",
     groups: {
-      app: "应用",
+      app: "此设备",
       host: "主机",
     },
     hostPicker: {
@@ -2393,7 +2412,9 @@ export const zhCN: TranslationResources = {
     groupInfo: "关于 {{title}}",
     sections: {
       general: "通用",
+      hosts: "主机",
       chat: "聊天",
+      chatAndPanes: "聊天与面板",
       appearance: "外观",
       sidebar: "侧边栏",
       terminal: "终端",
@@ -2406,6 +2427,15 @@ export const zhCN: TranslationResources = {
       permissions: "权限",
       diagnostics: "诊断",
       about: "关于",
+    },
+    clientHosts: {
+      title: "已保存的主机",
+      info: "此设备连接的主机。这里的名称、图标、徽章和连接路径仅影响此设备。",
+      backToHosts: "返回主机",
+      routesTitle: "此设备的连接方式",
+      routesInfo: "此设备连接到该主机的已保存路径。Paseo 会自动选择最快的可用路径。",
+      addRoute: "添加路径",
+      activeRoute: "当前使用",
     },
     layout: en.settings.layout,
     editor: {
@@ -2423,17 +2453,47 @@ export const zhCN: TranslationResources = {
     },
     notifications: {
       title: "通知",
-      enabled: "通知已启用",
-      disabled: "通知已禁用",
-      enabledHint: "控制此 Paseo 安装实例的通知。",
-      disable: "禁用通知",
-      enable: "启用通知",
-      saveFailed: "无法更改通知设置。请重试。",
-      systemSettings: "系统通知权限",
-      nativeDisableHint:
-        "如需立即彻底屏蔽所有通知，请在系统设置中关闭 Paseo 的通知权限。离线或旧版主机以及已发送的通知仍可能送达。重新启用通知时，请在系统设置中恢复权限。",
-      openSettings: "打开系统设置",
-      openSettingsFailed: "无法打开系统设置。",
+      enabled: {
+        label: "启用通知",
+        description: "在此设备上接收来自智能体、终端和插件的通知",
+        pausedDescription: "此设备上的所有通知（包括插件通知）均已暂停",
+      },
+      events: {
+        title: "事件",
+        agentPermission: {
+          label: "智能体需要权限",
+          description: "审批、计划与提问",
+        },
+        agentError: {
+          label: "智能体出错",
+          description: "当智能体因错误停止时",
+        },
+        agentFinished: {
+          label: "智能体已完成",
+          description: "当智能体完成一轮回复时",
+        },
+        terminalNeedsInput: {
+          label: "终端等待输入",
+          description: "当终端命令正在等待输入时",
+        },
+        terminalFinished: {
+          label: "终端命令完成",
+          description: "当终端命令执行结束时",
+        },
+      },
+      plugins: {
+        title: "插件",
+        enabled: {
+          label: "插件通知",
+          description: "允许已安装的插件发送通知",
+        },
+        empty: "已安装的插件会显示在这里，方便你单独静音",
+      },
+      legacyHostTitle: "更新主机以同步推送偏好",
+      legacyHostHint: "更新已连接的主机，以同步此设备上的自定义推送通知偏好设置",
+      desktop: {
+        title: "系统",
+      },
       permission: "通知权限",
       refreshAccessibility: "刷新通知权限",
       playSound: "播放声音",
@@ -2451,6 +2511,7 @@ export const zhCN: TranslationResources = {
       projects: "项目",
       connections: "连接",
       agents: "Agents",
+      tools: "工具与提示词",
       agentProfiles: "智能体配置文件",
       metadata: "元数据",
       voice: "语音",
@@ -2460,6 +2521,7 @@ export const zhCN: TranslationResources = {
       terminals: "Terminals",
       plugins: "插件",
       host: "概览",
+      daemon: "守护进程",
     },
     plugins: pluginSettings["zh-CN"],
     metadataGeneration: {
@@ -2993,6 +3055,10 @@ export const zhCN: TranslationResources = {
           delete: "删除 skill",
         },
       },
+      tools: {
+        instructionsTitle: "指令",
+        toolsTitle: "代理工具",
+      },
       orchestration: {
         title: "编排",
         unavailable: "连接到这个 Host 以管理编排",
@@ -3059,6 +3125,7 @@ export const zhCN: TranslationResources = {
       },
       agentProfiles: {
         sectionTitle: "Agent 配置",
+        sectionDescription: "保存可快速选用的 Agent 设置，Agent 委派工作时也可以使用这些配置",
         unavailable: "连接到这个 Host 以管理 Agent 配置",
         unsupported: "此 Host 运行的 Daemon 尚不支持 Agent 配置",
         emptyState: "还没有配置。添加一个以便使用保存的 Provider 和 Model 启动 Agent。",
@@ -3082,6 +3149,9 @@ export const zhCN: TranslationResources = {
         featuresLabel: "Features",
         featureCount: "{{count}} 个 Feature",
         featureCountOne: "{{count}} 个 Feature",
+        systemPromptLabel: "System prompt",
+        systemPromptPlaceholder: "专注于布局、无障碍和设计 token。",
+        systemPromptHint: "仅适用于新 Agent",
         notesLabel: "适用场景",
         notesPlaceholder: "用于 UI 工作 — 组件、布局和设计 token。",
         notesHint: "帮助 Agent 在启动另一个 Agent 时选择此配置。",
@@ -3119,6 +3189,7 @@ export const zhCN: TranslationResources = {
         },
       },
       daemon: {
+        runtimeTitle: "代理运行时",
         rename: {
           editLabel: "编辑标签",
           title: "重命名 Host",

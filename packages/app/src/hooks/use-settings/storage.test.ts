@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@getpaseo/protocol/notification-preferences";
 import {
   APP_SETTINGS_KEY,
   APP_SETTINGS_QUERY_KEY,
@@ -1212,4 +1213,101 @@ describe("font family CSS safety", () => {
       expect(await loadAppSettingsFromStorage(deps)).toMatchObject({ [field]: "" });
     },
   );
+});
+
+describe("notification preferences storage", () => {
+  it("defaults notifications to DEFAULT_NOTIFICATION_PREFERENCES when storage is empty", async () => {
+    const deps = makeDeps();
+    const settings = await loadAppSettingsFromStorage(deps);
+    expect(settings.notifications).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
+  });
+
+  it("migrates the fork's paused master switch into notification preferences", async () => {
+    const storage = createInMemoryKeyValueStorage({
+      [APP_SETTINGS_KEY]: JSON.stringify({ notificationsEnabled: false }),
+    });
+    const deps = makeDeps({ storage });
+    const preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES, enabled: false };
+
+    expect((await loadAppSettingsFromStorage(deps)).notifications).toEqual(preferences);
+    const stored = JSON.parse(storage.entries.get(APP_SETTINGS_KEY) ?? "{}");
+    expect(stored.notifications).toEqual(preferences);
+    expect(stored).not.toHaveProperty("notificationsEnabled");
+  });
+
+  it("keeps durable notification preferences when another window saves unrelated settings", async () => {
+    const paused = { ...DEFAULT_NOTIFICATION_PREFERENCES, enabled: false };
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ notifications: paused }),
+      }),
+    });
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, DEFAULT_CLIENT_SETTINGS);
+
+    await saveAppSettings({ queryClient, deps, updates: { vimKeybindings: true } });
+
+    expect((await loadAppSettingsFromStorage(deps)).notifications).toEqual(paused);
+    expect(queryClient.getQueryData(APP_SETTINGS_QUERY_KEY)).toMatchObject({
+      notifications: paused,
+      vimKeybindings: true,
+    });
+  });
+
+  it("persists and reloads custom notification preferences", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    const notifications = {
+      enabled: true,
+      events: {
+        agentPermission: true,
+        agentError: false,
+        agentFinished: true,
+        terminalNeedsInput: false,
+        terminalFinished: true,
+      },
+      plugins: {
+        enabled: true,
+        muted: ["ci-bot", "deploy-bot"],
+      },
+    };
+
+    await saveAppSettings({ queryClient, deps, updates: { notifications } });
+    expect((await loadAppSettingsFromStorage(deps)).notifications).toEqual(notifications);
+  });
+
+  it("normalizes partial and malformed notification preferences on load", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          vimKeybindings: true,
+          notifications: {
+            enabled: "invalid",
+            events: {
+              agentFinished: true,
+              agentError: "nope",
+            },
+            plugins: {
+              enabled: true,
+              muted: ["  zeta ", "", 42, "alpha", "zeta"],
+            },
+          },
+        }),
+      }),
+    });
+
+    const settings = await loadAppSettingsFromStorage(deps);
+    expect(settings.vimKeybindings).toBe(true);
+    expect(settings.notifications).toEqual({
+      enabled: true,
+      events: {
+        ...DEFAULT_NOTIFICATION_PREFERENCES.events,
+        agentFinished: true,
+      },
+      plugins: {
+        enabled: true,
+        muted: ["alpha", "zeta"],
+      },
+    });
+  });
 });

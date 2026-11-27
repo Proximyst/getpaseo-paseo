@@ -90,7 +90,7 @@ async function ensureNotificationPermission(): Promise<boolean> {
 }
 
 export async function ensureOsNotificationPermission(): Promise<boolean> {
-  if (isNative || !(await loadAppSettingsFromStorage()).notificationsEnabled) {
+  if (isNative || !(await loadAppSettingsFromStorage()).notifications.enabled) {
     return false;
   }
   return await ensureNotificationPermission();
@@ -145,7 +145,7 @@ function attachWebClickHandler(
 export async function sendOsNotification(payload: OsNotificationPayload): Promise<boolean> {
   // Mobile/native notifications should be remote push only.
   // Other open windows may have a stale query cache; durable settings govern delivery.
-  if (isNative || !(await loadAppSettingsFromStorage()).notificationsEnabled) {
+  if (isNative || !(await loadAppSettingsFromStorage()).notifications.enabled) {
     return false;
   }
 
@@ -157,7 +157,7 @@ export async function sendOsNotification(payload: OsNotificationPayload): Promis
   const NotificationConstructor = getWebNotificationConstructor();
   if (NotificationConstructor) {
     const granted = await ensureNotificationPermission();
-    if (granted && (await loadAppSettingsFromStorage()).notificationsEnabled) {
+    if (granted && (await loadAppSettingsFromStorage()).notifications.enabled) {
       const notification = new NotificationConstructor(payload.title, {
         body: payload.body,
         data: payload.data,

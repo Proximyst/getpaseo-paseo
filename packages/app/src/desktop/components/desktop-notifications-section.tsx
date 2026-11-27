@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Linking, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { withUnistyles } from "react-native-unistyles";
 import { RotateCw } from "lucide-react-native";
 import { Alert } from "@/components/ui/alert";
@@ -11,87 +11,13 @@ import { useDesktopPermissions } from "@/desktop/permissions/use-desktop-permiss
 import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { settingsStyles } from "@/styles/settings";
-import { isNative } from "@/constants/platform";
-import { isElectronRuntime } from "@/desktop/host";
-import { useAppSettings } from "@/hooks/use-settings";
-import { useToast } from "@/contexts/toast-context";
 
 const ThemedRotateCw = withUnistyles(RotateCw, (theme) => ({
   size: theme.iconSize.md,
   color: theme.colors.foregroundMuted,
 }));
 
-export function NotificationsSection() {
-  const { t } = useTranslation();
-  const toast = useToast();
-  const { settings, isLoading, updateSettings } = useAppSettings();
-  const [isSaving, setIsSaving] = useState(false);
-  const handleToggle = useCallback(async () => {
-    if (isSaving) return;
-    setIsSaving(true);
-    try {
-      await updateSettings({ notificationsEnabled: !settings.notificationsEnabled });
-    } catch {
-      toast.error(t("settings.notifications.saveFailed"));
-    } finally {
-      setIsSaving(false);
-    }
-  }, [isSaving, settings.notificationsEnabled, t, toast, updateSettings]);
-  const handleOpenSettings = useCallback(() => {
-    void Linking.openSettings().catch(() => {
-      toast.error(t("settings.notifications.openSettingsFailed"));
-    });
-  }, [t, toast]);
-
-  return (
-    <>
-      <SettingsSection title={t("settings.notifications.title")}>
-        <View style={settingsStyles.card}>
-          <View style={settingsStyles.row}>
-            <View style={settingsStyles.rowContent}>
-              <Text style={settingsStyles.rowTitle}>
-                {settings.notificationsEnabled
-                  ? t("settings.notifications.enabled")
-                  : t("settings.notifications.disabled")}
-              </Text>
-              <Text style={settingsStyles.rowHint}>{t("settings.notifications.enabledHint")}</Text>
-            </View>
-            <Button
-              variant="outline"
-              onPress={handleToggle}
-              disabled={isLoading || isSaving}
-              loading={isSaving}
-            >
-              {settings.notificationsEnabled
-                ? t("settings.notifications.disable")
-                : t("settings.notifications.enable")}
-            </Button>
-          </View>
-          {isNative ? (
-            <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
-              <View style={settingsStyles.rowContent}>
-                <Text style={settingsStyles.rowTitle}>
-                  {t("settings.notifications.systemSettings")}
-                </Text>
-                <Text style={settingsStyles.rowHint}>
-                  {t("settings.notifications.nativeDisableHint")}
-                </Text>
-              </View>
-              <Button variant="outline" onPress={handleOpenSettings}>
-                {t("settings.notifications.openSettings")}
-              </Button>
-            </View>
-          ) : null}
-        </View>
-      </SettingsSection>
-      {isElectronRuntime() && settings.notificationsEnabled ? (
-        <DesktopNotificationControls />
-      ) : null}
-    </>
-  );
-}
-
-function DesktopNotificationControls() {
+export function DesktopNotificationsSection({ title }: { title?: string } = {}) {
   const { t } = useTranslation();
   const { settings, isSaving, updateSettings } = useDesktopSettings();
   const {
@@ -159,7 +85,10 @@ function DesktopNotificationControls() {
   const notificationsGranted = snapshot?.notifications.state === "granted";
 
   return (
-    <SettingsSection title={t("settings.notifications.permission")} trailing={refreshButton}>
+    <SettingsSection
+      title={title ?? t("settings.notifications.desktop.title")}
+      trailing={refreshButton}
+    >
       <View style={settingsStyles.card}>
         <DesktopPermissionRow
           title={t("settings.notifications.permission")}

@@ -1,5 +1,10 @@
 import { isSyntaxThemeId, type SyntaxThemeId } from "@getpaseo/highlight";
 import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizeNotificationPreferences,
+  type NotificationPreferences,
+} from "@getpaseo/protocol/notification-preferences";
 import type { QueryClient } from "@tanstack/react-query";
 import type { DesktopSettings } from "@/desktop/settings/desktop-settings";
 import type { AppLanguage } from "@/i18n/locales";
@@ -84,7 +89,6 @@ export interface AppSettings {
   pluginThemeId: string | null;
   language: AppLanguage;
   microphoneEnabled: boolean;
-  notificationsEnabled: boolean;
   sendBehavior: SendBehavior;
   serviceUrlBehavior: ServiceUrlBehavior;
   terminalScrollbackLines: number;
@@ -117,6 +121,7 @@ export interface AppSettings {
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
   pullRequestOpenLocation: PullRequestOpenLocation;
+  notifications: NotificationPreferences;
 }
 
 export type AppSettingsUpdate =
@@ -149,7 +154,6 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   pluginThemeId: null,
   language: "system",
   microphoneEnabled: true,
-  notificationsEnabled: true,
   sendBehavior: "steer",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
@@ -176,6 +180,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   filePanelAssociations: {},
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
   pullRequestOpenLocation: "explorer",
+  notifications: DEFAULT_NOTIFICATION_PREFERENCES,
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -232,7 +237,7 @@ const StoredAppSettingsSchema = z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
     microphoneEnabled: z.boolean().catch(true),
-    notificationsEnabled: z.boolean().catch(true),
+    notificationsEnabled: z.boolean().optional().catch(undefined),
     sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
     terminalScrollbackLines: clampedNumber(
@@ -307,18 +312,20 @@ const StoredAppSettingsSchema = z
         legacyPullRequestsInSidePane: undefined,
       }),
     pullRequestOpenLocation: z.enum(["main", "side", "explorer"]).optional(),
+    notifications: z.unknown().optional(),
     // COMPAT(explorerSidebarRouting): replaced by source-specific side-pane preferences in v0.6.
     openSupportingTabsInSidePanel: z.boolean().optional().catch(undefined),
     // COMPAT(rendererDesktopSettings): these fields used to share this renderer-owned key.
     manageBuiltInDaemon: z.boolean().optional().catch(undefined),
     releaseChannel: z.enum(["stable", "beta"]).optional().catch(undefined),
   })
-  .transform(({ contentMaxWidth, ...stored }) => {
+  .transform(({ contentMaxWidth, notificationsEnabled, notifications, ...stored }) => {
     const { legacyPullRequestsInSidePane, ...openInSidePane } = stored.openInSidePane;
     const needsWrite =
       contentMaxWidth !== undefined ||
       (stored.uiBaseFontSize === undefined && stored.uiFontSize !== undefined) ||
-      stored.contentFontSize === undefined;
+      stored.contentFontSize === undefined ||
+      notificationsEnabled !== undefined;
     const uiBaseFontSize =
       stored.uiBaseFontSize ??
       (stored.uiFontSize === undefined
@@ -349,6 +356,10 @@ const StoredAppSettingsSchema = z
           (stored.sidebarRowItems.scripts === false ? false : DEFAULT_SIDEBAR_ROW_ITEMS.services),
       },
       chatDisplay,
+      // The fork stored its master switch before per-event preferences were introduced.
+      notifications: normalizeNotificationPreferences(
+        notifications ?? { enabled: notificationsEnabled },
+      ),
       needsWrite,
     };
   })
@@ -389,12 +400,12 @@ export async function saveAppSettings(input: {
   const current = normalizeAppSettings(storedCurrent);
   // Another window may have changed notification delivery since this cache was loaded.
   if (stored) {
-    current.notificationsEnabled = stored.notificationsEnabled;
+    current.notifications = stored.notifications;
   }
   const updates = typeof input.updates === "function" ? input.updates(current) : input.updates;
   const next = { ...current, ...updates };
   // Notification delivery reads durable storage, so publish this preference only after saving.
-  const changesNotifications = updates.notificationsEnabled !== undefined;
+  const changesNotifications = updates.notifications !== undefined;
   if (!changesNotifications) {
     input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
   }

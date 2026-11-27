@@ -34,6 +34,7 @@ const originalGlobals: GlobalSnapshot = {
 async function loadModuleForPlatform(
   platform: "web" | "ios" | "android",
   options?: {
+    readNotificationsEnabled?: () => boolean;
     desktopHost?: {
       notification?: {
         sendNotification?: (payload: {
@@ -51,7 +52,9 @@ async function loadModuleForPlatform(
     getDesktopHost: () => options?.desktopHost ?? null,
   }));
   vi.doMock("@/hooks/use-settings", () => ({
-    loadAppSettingsFromStorage: async () => ({ notificationsEnabled: true }),
+    loadAppSettingsFromStorage: async () => ({
+      notifications: { enabled: options?.readNotificationsEnabled?.() ?? true },
+    }),
   }));
   vi.doMock("expo-asset", () => ({
     Asset: {
@@ -289,5 +292,22 @@ describe("sendOsNotification", () => {
       body: "If you can see this, desktop notifications work.",
       data: { serverId: "srv-1" },
     });
+  });
+
+  it("honors the durable master preference on each desktop delivery", async () => {
+    let enabled = true;
+    const sendNotification = vi.fn(async () => true);
+    const { sendOsNotification } = await loadModuleForPlatform("web", {
+      desktopHost: { notification: { sendNotification } },
+      readNotificationsEnabled: () => enabled,
+    });
+
+    enabled = false;
+    expect(await sendOsNotification({ title: "Paused" })).toBe(false);
+    expect(sendNotification).not.toHaveBeenCalled();
+
+    enabled = true;
+    expect(await sendOsNotification({ title: "Resumed" })).toBe(true);
+    expect(sendNotification).toHaveBeenCalledWith({ title: "Resumed" });
   });
 });

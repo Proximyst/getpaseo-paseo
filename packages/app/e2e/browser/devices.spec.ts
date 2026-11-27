@@ -3,6 +3,7 @@ import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
 import {
   addDirectHostFromSettings,
+  openClientHostSettings,
   openSettingsHost,
   openSettingsHostSection,
   seedSavedSettingsHosts,
@@ -42,6 +43,16 @@ test("home and host settings do not offer relay pairing", async ({ page }) => {
     await openSettingsHostSection(page, daemon.serverId, "devices");
     await expect(page.getByText("Tailscale", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Relay", exact: true })).toHaveCount(0);
+
+    await openClientHostSettings(page, daemon.serverId);
+    await page.getByTestId("client-host-add-route").click();
+    const connectionMethods = page.getByTestId("add-host-method-modal");
+    await expect(
+      connectionMethods.getByRole("button", { name: "Direct connection" }),
+    ).toBeVisible();
+    await expect(connectionMethods.getByRole("button", { name: /relay|pair|scan/i })).toHaveCount(
+      0,
+    );
   } finally {
     await daemon.close();
   }
@@ -85,6 +96,11 @@ test("turns Tailscale on and off from Devices, asking first over Tailscale", asy
       const restoreSpeed = await slowConnectionToHost(page, daemon.port, 300);
       await expectTailscaleRowLoadsOn(page, address, () => openSetupDevicesStep(page, daemon));
       await expectTailscaleRowLoadsOn(page, address, () => openHostDevices(page, daemon));
+      await test.step("Turning Tailscale off and back on settles over a slow connection", async () => {
+        await disableTailscale(page, address);
+        await enableTailscale(page);
+        await expectTailscaleAddress(page, address);
+      });
       restoreSpeed();
     });
 

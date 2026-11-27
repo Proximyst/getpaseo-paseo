@@ -1,4 +1,5 @@
 import type { ForgeService, PullRequestCheckoutTarget } from "../services/forge-service.js";
+import { buildPullHeadCheckoutRefs } from "../utils/change-request-checkout.js";
 import { listGitHubFetchRemotes } from "../utils/git-fetch-remotes.js";
 import type { WorktreeCheckoutRef, WorktreeSource } from "../utils/worktree.js";
 import type { UntrustedWorkspaceSource } from "./workspace-automation-gate.js";
@@ -114,13 +115,14 @@ export async function resolveWorktreeCreationIntent(
     const changeRequest = resolveInputChangeRequest(input);
     if (changeRequest) {
       assertCheckoutSourceMatchesResolvedForge(changeRequest, deps);
-      return resolvePrCheckoutIntent({
+      const { checkout } = await resolvePrCheckoutPlan({
         refName: input.refName,
         changeRequestNumber: changeRequest.number,
         projectPath: changeRequest.projectPath,
         repoRoot,
         deps,
       });
+      return checkout;
     }
 
     const branchName = input.refName?.trim();
@@ -137,13 +139,14 @@ export async function resolveWorktreeCreationIntent(
   const changeRequest = resolveInputChangeRequest(input);
   if (changeRequest) {
     assertCheckoutSourceMatchesResolvedForge(changeRequest, deps);
-    return resolvePrCheckoutIntent({
+    const { checkout } = await resolvePrCheckoutPlan({
       refName: input.refName,
       changeRequestNumber: changeRequest.number,
       projectPath: changeRequest.projectPath,
       repoRoot,
       deps,
     });
+    return checkout;
   }
 
   if (input.refName?.trim()) {
@@ -181,7 +184,7 @@ async function fetchChangeRequestHead(params: {
 }> {
   const { input, changeRequest, repoRoot, deps } = params;
   assertCheckoutSourceMatchesResolvedForge(changeRequest, deps);
-  const checkout = await resolvePrCheckoutIntent({
+  const { checkout, baseName } = await resolvePrCheckoutPlan({
     refName: input.refName,
     changeRequestNumber: changeRequest.number,
     projectPath: changeRequest.projectPath,
@@ -195,7 +198,6 @@ async function fetchChangeRequestHead(params: {
     sources: checkout.checkoutRefs,
     destination: startPoint,
   });
-  const baseName = checkout.trackOriginHead ? checkout.headRef : checkout.baseRefName;
   const baseBranch = `refs/remotes/${remote}/${baseName}`;
   try {
     // Compared as the remote has it, not as a local branch last pulled.
@@ -249,11 +251,12 @@ function assertCheckoutSourceMatchesResolvedForge(
   }
 }
 
-async function resolvePrCheckoutIntent(params: PrCheckoutIntentParams): Promise<
-  Extract<WorktreeCreationIntent, { kind: "checkout-change-request" }> & {
+async function resolvePrCheckoutPlan(params: PrCheckoutIntentParams): Promise<{
+  checkout: Extract<WorktreeCreationIntent, { kind: "checkout-change-request" }> & {
     checkoutRefs: WorktreeCheckoutRef[];
-  }
-> {
+  };
+  baseName: string;
+}> {
   const { deps } = params;
   const service = deps.forgeService;
   const { checkoutTarget, baseRemote } = await resolvePrCheckoutTarget(params);
@@ -279,23 +282,30 @@ async function resolvePrCheckoutIntent(params: PrCheckoutIntentParams): Promise<
   }) ?? [{ remoteName: "origin", remoteRef: `refs/heads/${headRef}` }];
   const localBranchName = service.buildPrLocalBranchName?.({ headRef, checkoutTarget });
   const crossRepository = resolveCrossRepositoryFields(checkoutTarget);
-  const trackOriginHead =
+  const checkoutRefs = baseRemote
+    ? buildPullHeadCheckoutRefs(params.changeRequestNumber, [baseRemote])
+    : (checkoutTarget.checkoutRefs ?? defaultRefs);
+  const compareAgainstHead =
     (!baseRemote || baseRemote === "origin") &&
     !checkoutTarget.isCrossRepository &&
     checkoutTarget.headRefKind !== "pull-ref";
+  const trackOriginHead =
+    compareAgainstHead &&
+    (deps.forge !== "github" || checkoutRefs.some(({ remoteName }) => remoteName === "origin"));
 
   return {
-    kind: "checkout-change-request",
-    forge: deps.forge,
-    changeRequestNumber: params.changeRequestNumber,
-    headRef,
-    ...crossRepository,
-    baseRefName,
-    checkoutRefs: baseRemote
-      ? [{ remoteName: baseRemote, remoteRef: `refs/pull/${params.changeRequestNumber}/head` }]
-      : (checkoutTarget.checkoutRefs ?? defaultRefs),
-    ...(localBranchName && localBranchName !== headRef ? { localBranchName } : {}),
-    ...(trackOriginHead ? { trackOriginHead } : {}),
+    baseName: compareAgainstHead ? headRef : baseRefName,
+    checkout: {
+      kind: "checkout-change-request",
+      forge: deps.forge,
+      changeRequestNumber: params.changeRequestNumber,
+      headRef,
+      ...crossRepository,
+      baseRefName,
+      checkoutRefs,
+      ...(localBranchName && localBranchName !== headRef ? { localBranchName } : {}),
+      ...(trackOriginHead ? { trackOriginHead } : {}),
+    },
   };
 }
 

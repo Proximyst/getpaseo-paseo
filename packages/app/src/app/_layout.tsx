@@ -29,6 +29,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppState, useWindowDimensions, View } from "react-native";
 import { GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -110,6 +111,7 @@ import { KeyboardShiftProvider } from "@/keyboard/shift";
 import { useCompactWebViewportZoomLock } from "@/hooks/use-compact-web-viewport-zoom-lock";
 import { useOpenProject } from "@/hooks/use-open-project";
 import { useAppSettings } from "@/hooks/use-settings";
+import { APP_SETTINGS_KEY, APP_SETTINGS_QUERY_KEY } from "@/hooks/use-settings/keys";
 import { useOpenAgentListGesture } from "@/mobile-panels/gestures";
 import { MobilePanelsProvider, useIsMobilePanelActive } from "@/mobile-panels/provider";
 import {
@@ -886,12 +888,14 @@ function RootStack() {
         <Stack.Screen name="welcome" />
         <Stack.Screen name="settings/index" />
         <Stack.Screen name="settings/[section]" />
+        <Stack.Screen name="settings/hosts/index" />
         <Stack.Screen name="new" />
         <Stack.Screen name="open-project" />
         <Stack.Screen name="sessions" />
         <Stack.Screen name="schedules" />
       </Stack.Protected>
       <Stack.Screen name="h/[serverId]" />
+      <Stack.Screen name="settings/device-hosts/[serverId]" />
       <Stack.Screen name="settings/hosts/[serverId]/index" />
       <Stack.Screen name="settings/hosts/[serverId]/[hostSection]" />
       <Stack.Screen name="settings/hosts/[serverId]/plugins/[pluginId]/index" />
@@ -915,9 +919,22 @@ function WorkspaceRouteNavigationBridge() {
 }
 
 function AppShell() {
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (getDesktopHost()) void ensureOsNotificationPermission();
   }, []);
+  useEffect(() => {
+    if (!isWeb || typeof window === "undefined") return;
+
+    // Browser tabs and Electron windows share the device's notification preferences.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === APP_SETTINGS_KEY) {
+        void queryClient.invalidateQueries({ queryKey: APP_SETTINGS_QUERY_KEY, exact: true });
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [queryClient]);
   return (
     <MobilePanelsProvider>
       <HorizontalScrollProvider>

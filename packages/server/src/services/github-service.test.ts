@@ -1101,9 +1101,13 @@ describe("ForgeService", () => {
       resolveRepoHost,
     });
 
-    await expect(
-      service.getPullRequestCheckoutTarget({ cwd: "/repo", number: 526, repository: "acme/base" }),
-    ).resolves.toMatchObject({ number: 526, isCrossRepository: true });
+    const target = await service.getPullRequestCheckoutTarget({
+      cwd: "/repo",
+      number: 526,
+      repository: "acme/base",
+    });
+    expect(target).toMatchObject({ number: 526, isCrossRepository: true });
+    expect(target.checkoutRefs).toBeUndefined();
     expect(resolveRepoHost).not.toHaveBeenCalled();
     expect(runner.calls).toHaveLength(1);
     expect(runner.calls[0].envOverlay?.GH_HOST).toBe("github.com");

@@ -1,11 +1,11 @@
 import type { PullRequestCheckoutRef } from "../services/forge-service.js";
 
-// upstream for clones where origin is your fork
-export function buildPullHeadCheckoutRefs(number: number): PullRequestCheckoutRef[] {
-  return [
-    { remoteName: "origin", remoteRef: `refs/pull/${number}/head` },
-    { remoteName: "upstream", remoteRef: `refs/pull/${number}/head` },
-  ];
+export function buildPullHeadCheckoutRefs(
+  number: number,
+  remoteNames: readonly string[] = ["origin", "upstream"],
+): PullRequestCheckoutRef[] {
+  const remoteRef = `refs/pull/${number}/head`;
+  return remoteNames.map((remoteName) => ({ remoteName, remoteRef }));
 }
 
 // forgejo username pattern, covers github logins too
