@@ -63,6 +63,7 @@ import type {
   TerminalManager,
   TerminalWorkspaceContributionChangedEvent,
 } from "../terminal/terminal-manager.js";
+import type { TerminalSession } from "../terminal/terminal.js";
 import { TerminalSessionController } from "../terminal/terminal-session-controller.js";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { BinaryFrame } from "@getpaseo/protocol/binary-frames/index";
@@ -1127,6 +1128,8 @@ export class Session {
       checkoutDiffManager,
       gitMetadataGenerator: createGitMetadataGenerator({
         workspaceGitService: this.workspaceGitService,
+        readHostInstructions: () =>
+          this.readStructuredGenerationDaemonConfig().metadataGeneration?.instructions,
         generation: createAgentStructuredTextGeneration({
           agentManager: this.agentManager,
           providerSnapshotManager,
@@ -5960,9 +5963,7 @@ export class Session {
     );
   }
 
-  private async listTerminalActivityContributions(): Promise<
-    Array<{ cwd: string; workspaceId?: string; activity: TerminalActivity | null }>
-  > {
+  private async listAllTerminals(): Promise<TerminalSession[]> {
     const terminalManager = this.terminalManager;
     if (!terminalManager) {
       return [];
@@ -5971,7 +5972,30 @@ export class Session {
     const terminalsByDirectory = await Promise.all(
       directories.map((cwd) => terminalManager.getTerminals(cwd)),
     );
-    return terminalsByDirectory.flat().map((session) => {
+    return terminalsByDirectory.flat();
+  }
+
+  // A terminal belongs to the workspace it carries, whatever its cwd. Needs-input stays: the
+  // terminal is still waiting on the user, like an agent's pending permission.
+  private async clearWorkspaceTerminalAttention(workspaceId: string): Promise<void> {
+    const terminalManager = this.terminalManager;
+    if (!terminalManager) {
+      return;
+    }
+    const finishedTerminals = (await this.listAllTerminals()).filter(
+      (terminal) =>
+        terminal.workspaceId === workspaceId &&
+        terminal.getActivity()?.attentionReason === "finished",
+    );
+    for (const terminal of finishedTerminals) {
+      await terminalManager.clearTerminalAttention(terminal.id);
+    }
+  }
+
+  private async listTerminalActivityContributions(): Promise<
+    Array<{ cwd: string; workspaceId?: string; activity: TerminalActivity | null }>
+  > {
+    return (await this.listAllTerminals()).map((session) => {
       const contribution: { cwd: string; workspaceId?: string; activity: TerminalActivity | null } =
         {
           cwd: session.cwd,
@@ -8642,6 +8666,7 @@ export class Session {
           await this.agentManager.clearAgentAttention(agentId);
           clearedAgentIds.push(agentId);
         }
+        await this.clearWorkspaceTerminalAttention(workspace.workspaceId);
 
         await this.emitWorkspaceUpdateForWorkspaceId(workspace.workspaceId);
         results.push({

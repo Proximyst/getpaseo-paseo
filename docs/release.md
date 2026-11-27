@@ -4,29 +4,38 @@ All workspaces share one version and release together. This fork's release inven
 
 ## Two steps
 
-A release has exactly two steps. The agent does the first, the user authorizes the second.
+A release has two steps. The agent runs Preparation before approval, and the user authorizes Ship.
 
-**Preparation** (reversible — agent does this on the release branch):
+### Preparation
 
-- resolve the [release base](#release-base-and-source) and get the [release inventory](#release-inventory) approved when one applies
-- classify the diff from the previous stable to the release source as patch or minor, then show the
-  target version and rationale to the user
-- draft `CHANGELOG.md` and `CHANGELOG.zh-CN.md`, show the draft to the user, and wait for review
-- run the pre-release sanity check (stable only) and surface findings to the user
-- commit the approved changelog and any requested ACP update, run format, lint, and typecheck, then
-  run `npm run release:prep:<mode>` to create the `chore(release): cut <version>` commit without a tag
-- push the `release/vX.Y.Z` or `release/vX.Y.Z-beta.N` branch and confirm its `CI` and
-  `Desktop Packages` runs pass (never wait on `main` CI)
-- run the [pre-release dependency checks](#pre-release-dependency-checks) on the release commit
+Preparation is reversible and runs on the release branch before the user authorizes shipping.
 
-**Go-ahead** (user says "go ahead"):
+1. Resolve the [release base](#release-base-and-source) and get the [release inventory](#release-inventory) approved when one applies.
+2. Classify the diff from the previous stable release to the release source as patch or minor, then show the target version and rationale to the user.
+3. Draft `CHANGELOG.md` and `CHANGELOG.zh-CN.md`, show the draft to the user, and wait for approval.
+4. Run the [pre-release sanity check](#pre-release-sanity-check) for stable releases, and report any findings to the user.
+5. Commit the approved changelog and any requested ACP update, then run `npm run format`, `npm run lint`, and `npm run typecheck`.
+6. Run `npm run release:prep:<mode>` to create the `chore(release): cut <version>` commit without a tag.
+7. Push `release/vX.Y.Z` or `release/vX.Y.Z-beta.N` and wait for `CI` and `Desktop Packages` on that branch to pass (never wait on `main` CI).
+8. Run the [pre-release dependency checks](#pre-release-dependency-checks) on the release commit.
 
-- run `npm run release:ship` (stable) or `npm run release:ship:beta` (beta), which publishes npm
-  with retry and registry visibility checks, advances the `beta` dist-tag on stable when newer, and
-  pushes the tag on the already-verified commit
-- create the release heartbeat immediately and babysit it to completion
-- open the [reconcile `main`](#reconcile-main) PR right away so its CI runs in parallel with release
-  builds, then delete the remote release branch once the PR merges
+### Ship
+
+Ship starts only after the user gives go-ahead and Preparation is complete. Desktop release builds use workspace packages from the checked-out tag commit, so they do not wait for npm publication.
+
+1. Run `npm run release:push` to verify the clean release branch and push `vX.Y.Z` or `vX.Y.Z-beta.N` to `fork`. The tag starts `Desktop Release` and `Release Notes Sync`.
+2. As soon as the tag is pushed, start npm publication (`npm run release:publish` for stable or `npm run release:publish:beta` for beta), open the [reconcile `main`](#reconcile-main) PR, and create the [release heartbeat](#release-completion-and-heartbeat). These steps run independently of one another and of the Linux release build.
+
+### Sync gates
+
+Wait until every gate below passes before deleting the remote release branch or reporting the release as shipped:
+
+- All seven `@getpaseo/*` npm packages are visible on `latest` (stable) or `beta` (beta), and on stable the `beta` dist-tag points to the shipped version unless an active newer beta exists.
+- `Desktop Release` and `Release Notes Sync` are green for the tag on `Proximyst/getpaseo-paseo`.
+- The GitHub Release is published and non-draft (marked prerelease for beta), with the synced changelog body, all expected Linux desktop artifacts, and the Linux updater manifest (`latest-linux.yml` for stable or `beta-linux.yml` for beta).
+- The reconcile PR is merged into `main`.
+
+Once all sync gates pass, delete the remote release branch (`git push fork --delete release/vX.Y.Z` or `release/vX.Y.Z-beta.N`), delete the heartbeat, and report the release as shipped.
 
 Rules that apply to both steps:
 
@@ -108,12 +117,12 @@ Release from `Proximyst/getpaseo-paseo`, not upstream. Verify that `fork` points
    runs on the release branch commit to pass, then complete the
    [pre-release dependency checks](#pre-release-dependency-checks) on that commit. Pushing the
    branch without a tag does not publish.
-6. After go-ahead, run `npm run release:ship` (stable) or `npm run release:ship:beta` (beta).
-   This publishes to npm and pushes the `v*` tag to `fork` on the already-verified commit.
-7. Start [Reconcile `main`](#reconcile-main) immediately so its PR checks overlap with the Linux
-   desktop release build.
+6. After go-ahead, follow [Ship](#ship): push the tag with `npm run release:push`, then start npm
+   publication, reconciliation, and the heartbeat without waiting for the Linux desktop build.
+   The release branch is already pushed at `HEAD`, so pushing only the tag does not start a
+   second branch CI run.
 
-When branching from a tag older than the split preparation and shipping commands,
+When branching from a tag older than the release commands or `release/**` workflow triggers,
 cherry-pick the release-tooling changes to the release branch without changing product code,
 so the release branch push runs both preflight workflows.
 
@@ -124,7 +133,7 @@ computes that from a prerelease, so run `npm run release:check`, bump with
 `npm version 0.13.4-beta.1 --include-workspace-root --no-git-tag-version && git commit -m "chore(release): cut 0.13.4-beta.1"`,
 push the release branch for `CI` and `Desktop Packages`, and complete the
 [pre-release dependency checks](#pre-release-dependency-checks) before shipping with
-`npm run release:ship:beta`.
+`npm run release:push` and `npm run release:publish:beta` (or `npm run release:ship:beta`).
 Record the tested beta tag as its source so its soak still counts for the unchanged content.
 
 ## Release inventory
@@ -153,8 +162,9 @@ For a promotion, every item defaults to defer.
 
 ## Reconcile main
 
-Right after the tag push, open a PR into `main` from a fresh branch off `fork/main` named
-`reconcile/vX.Y.Z` or `reconcile/vX.Y.Z-beta.N`:
+Right after the tag push, open a PR into `main` on `Proximyst/getpaseo-paseo` from a fresh
+branch off `fork/main` named `reconcile/vX.Y.Z` or `reconcile/vX.Y.Z-beta.N`. Reconciliation
+reads the tagged commit, so it does not wait for npm publication or the Linux build:
 
 ```bash
 git fetch fork --tags
@@ -174,10 +184,9 @@ hunks from the release base:
 - Leaves unshipped work on `main` untouched and makes no claims about unshipped work in the
   changelog entry.
 
-Commit, open the PR into `main`, and merge once its checks pass. After the reconcile PR merges and
-the release completes, delete the remote release branch (`git push fork --delete release/vX.Y.Z`
-or `release/vX.Y.Z-beta.N`). The tag is the record of shipped source; Paseo maintains no release
-track besides `main`.
+Commit, open the PR into `main`, and merge once its checks pass. Delete the release branch
+from `fork` only after the PR merges and every [sync gate](#sync-gates) passes. The tag is
+the record of shipped source; Paseo maintains no release track besides `main`.
 
 ## ACP catalog updates
 
@@ -234,27 +243,28 @@ npm run release:prep:minor
 git push -u fork HEAD
 # Complete the pre-release dependency checks on this commit.
 
-# 3. After go-ahead and green release-branch checks: publish npm and push the tag.
-npm run release:ship
+# 3. After go-ahead and green release-branch checks: push the tag first to start builds.
+npm run release:push
+
+# 4. Run these in parallel immediately after step 3:
+npm run release:publish
+# Also open the reconcile/vX.Y.Z PR into main and create the release heartbeat.
+# (`npm run release:ship` runs `release:push` before `release:publish` if used standalone.)
 ```
 
-`release:ship` runs `scripts/publish-release-packages.mjs` and `scripts/push-current-release-tag.mjs`:
+`scripts/push-current-release-tag.mjs` requires a clean `release/*` branch, checks that `HEAD`
+matches the release branch on `fork`, and refuses to reuse a version tag that points to a
+different commit locally or on `fork`. It pushes only the tag, so no second branch CI run starts.
 
-- Publishes all seven `@getpaseo/*` packages in dependency order, skips versions already on npm,
-  retries transient 429/5xx/network errors, and waits until each version is visible on npm before
-  continuing.
-- Checks `npm view @getpaseo/cli dist-tags` and moves npm's `beta` dist-tag to the new stable
-  version across all seven packages whenever the stable version is newer than `beta` (leaving
-  `beta` untouched during a stable hotfix on an older line).
-- Before publishing, checks that `HEAD` matches the pushed `release/*` branch on `fork` and that
-  no local or remote tag for this version points elsewhere. After publishing, pushes `vX.Y.Z`
-  without changing the branch.
+`scripts/publish-release-packages.mjs` publishes the seven `@getpaseo/*` packages in dependency
+order: highlight, relay, protocol, client, plugin, server, and CLI.
 
-The tag push triggers `Desktop Release` and `Release Notes Sync` on GitHub Actions. The
-GitHub Release is created as a draft and published after the Linux artifacts and updater
-manifest are ready.
+The publisher skips package versions already visible on npm, retries transient registry errors,
+and waits for each newly published version to be visible before continuing. On stable releases,
+it checks `npm view @getpaseo/cli dist-tags` and moves `beta` across all seven packages when the
+stable version is newer (leaving an active newer beta in place).
 
-Verify `npm view @getpaseo/cli dist-tags` shows `latest` at the shipped version, and `beta` at the shipped version or an active newer beta, before considering the stable release complete.
+Confirm the expected dist-tags on all seven packages before considering the stable release complete.
 
 **Stable means stable.** If the user says "stable" or "ship stable", do not ask whether they want a beta first. They picked stable; treat it as a direct stable release. Only run the beta flow when the user explicitly says "beta".
 
@@ -269,9 +279,10 @@ npm run version:all:minor
 git push -u fork HEAD        # Trigger CI + Desktop Packages on release/vX.Y.Z
 # Wait for CI and Desktop Packages and complete the pre-release dependency checks.
 # After go-ahead:
-node scripts/push-current-release-tag.mjs --check
+npm run release:push         # Push vX.Y.Z to fork and start the Linux release build
+# In parallel right after release:push:
 npm run release:publish      # Publish to npm (idempotent, with propagation + beta dist-tag sync)
-npm run release:push         # Create tag vX.Y.Z on HEAD and push (triggers release workflows)
+# Open reconcile/vX.Y.Z PR into main and create the release heartbeat.
 ```
 
 ## Beta flow
@@ -288,24 +299,27 @@ npm run release:prep:beta:next   # Cut X.Y.Z-beta.2, beta.3, ...
 git push -u fork HEAD
 # Complete the pre-release dependency checks on this commit.
 
-# 3. After go-ahead:
-npm run release:ship:beta
+# 3. After go-ahead: push the tag first, then run npm publish, reconcile, and heartbeat in parallel:
+npm run release:push
+npm run release:publish:beta
+# If using `npm run release:ship:beta`, start reconciliation and the heartbeat after its tag push.
 
 # Later, after soak, promote on release/vX.Y.Z:
 npm run release:prep:promote
 git push -u fork HEAD
 # Wait for CI + Desktop Packages and complete the pre-release dependency checks.
 # After go-ahead:
-npm run release:ship
+npm run release:push
+npm run release:publish
+# Open reconcile/vX.Y.Z PR into main and create the release heartbeat in parallel.
 ```
 
-- Beta tags are published GitHub prereleases like `v0.1.41-beta.1`
-- Betas publish npm packages with `--tag beta`, so `npm install @getpaseo/cli@beta` opts in while plain `npm install @getpaseo/cli` stays on `latest`
+- Beta tags are published GitHub prereleases like `v0.1.41-beta.1`.
+- Betas publish npm packages with `--tag beta`, so `npm install @getpaseo/cli@beta` opts in while plain `npm install @getpaseo/cli` stays on `latest`.
 - The user-facing Linux desktop and npm beta instructions live in `public-docs/updates.md`.
 - Betas publish Linux desktop assets and npm packages for testing.
-- `release:prep:promote` and `release:ship` create a fresh stable tag like `v0.1.41`; the final
-  release never reuses the beta tag.
-- Desktop assets now come from the Electron package at `packages/desktop`
+- `release:prep:promote` prepares a fresh stable version, and `release:push` creates its own tag like `v0.1.41`; the final release never reuses the beta tag.
+- Desktop assets come from the Electron package at `packages/desktop`.
 - Require the Linux artifact CI checks with both restricted and usable user namespaces to pass before publication; see [packaged desktop smoke](testing.md#packaged-desktop-smoke). Keep the installed-package and AppImage checks together.
 - Beta releases use Electron's `beta` update channel. Users on the stable channel only receive stable releases; users on the beta channel receive beta releases and the final stable release when it is published.
 - **A beta series has one changelog entry.** Each beta folds into it and renames its heading to the new `## X.Y.Z-beta.N`, which `Release Notes Sync` mirrors into that prerelease body. Promotion renames it to the stable heading. See the Changelog policy section.
@@ -473,9 +487,8 @@ Before an install at quit, the app asks GitHub for the latest release for up to 
 
 ## Release completion and heartbeat
 
-A release is **in progress** after npm publication and tag push. Report it as
-**shipped** only after every applicable Linux build, npm publication, asset, and
-manifest passes the completion checklist.
+A release is **in progress** once the tag is pushed. Report it as **shipped** only after every
+applicable [sync gate](#sync-gates) and completion checklist item passes.
 
 Immediately after every beta, stable, or promotion tag push, create a heartbeat
 that resumes the release in the current conversation. Create it automatically
@@ -483,10 +496,9 @@ with `create_heartbeat`. The heartbeat owns the release until it either reaches
 the completion checklist or finds a failure that needs new user authority.
 
 Each heartbeat checks the release tag commit, `CI` and `Desktop Packages` for the release branch,
-`Desktop Release` and `Release Notes Sync` for the tag, npm dist-tags, the GitHub Release body and
-Linux desktop assets, the Linux updater manifest (`latest-linux.yml` for stable or
-`beta-linux.yml` for beta), and the reconcile PR. Once the PR merges and the release checks pass,
-delete the remote release branch, delete the heartbeat, and report the release as shipped.
+and every [sync gate](#sync-gates) on the fork. Check the published GitHub Release itself for
+the changelog body, expected Linux assets, and the channel's Linux updater manifest. Once
+the gates pass, clean up the remote release branch and heartbeat, then report the release as shipped.
 
 Pattern:
 
@@ -498,7 +510,7 @@ Pattern:
   "timezone": "UTC",
   "maxRuns": 120,
   "expiresIn": "24h",
-  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check npm tags; CI and Desktop Packages on release/vX.Y.Z; Desktop Release and Release Notes Sync for the tag; the GitHub Release body, expected Linux assets, and Linux updater manifest; and the reconcile PR into main. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. Once the reconcile PR merges and the release checks pass, delete release/vX.Y.Z from fork, delete THIS heartbeat, report shipped, and stop.",
+  "prompt": "Resume the vX.Y.Z release for commit <sha> on Proximyst/getpaseo-paseo. Check CI and Desktop Packages on release/vX.Y.Z; Desktop Release and Release Notes Sync for the tag; every published npm package's dist-tags; the published GitHub Release body, expected Linux assets and updater manifest; and the reconcile PR into main. If work is pending, wait for the next heartbeat. If an authorized retry can safely use the same version, follow the failed-release procedure; otherwise report the blocker. Once every sync gate passes, delete release/vX.Y.Z from fork, delete THIS heartbeat, report shipped, and stop.",
 }
 ```
 
@@ -516,11 +528,16 @@ The GitHub Release body is populated automatically by the `Release Notes Sync` w
 - The download page offers Linux desktop and npm installation. The browser UI is served by the daemon or built from the supported web target; it is not a separate native release.
 - The public `/changelog` page renders `CHANGELOG.md` as-is, so the in-flight `-beta.N` entry shows there once it lands on `main`. Download links come from the release feed, not the changelog; a `-beta.N` heading never affects the stable download target.
 - The download page's "What's new" link deep-links the **minor group** anchor (`/changelog#release-0.3`), not the exact entry: the beta entry is renamed on each beta and on promotion, so the minor group remains the durable target. A version with no entry in the bundled changelog — a tag whose changelog commit hasn't redeployed the site yet — links the plain `/changelog` instead of a dead anchor.
-- The website itself is deployed by `Deploy Website` (Cloudflare Workers), which redeploys on the `release: published` event emitted when a stable draft is published and on pushes to `main` that touch `CHANGELOG.md` or `packages/website/**`. Its job condition excludes beta prereleases.
+- Stable tags can trigger `Deploy App` for the browser build. `Deploy Website` accepts published stable releases and matching pushes to `main`; it excludes beta prereleases. These Cloudflare deployments are separate from the fork's Linux release gates.
 
 ## Fixing a failed release build
 
 **NEVER bump the version to fix a build problem.** New versions are reserved for meaningful product changes (features, fixes, improvements). Build/CI failures are fixed on the current version.
+
+If `release:publish` or `release:publish:beta` fails after the tag push, correct the npm
+authentication, OTP, or local build issue and retry just that publish command on the same
+commit. Do not move or force-push the release tag. The publisher skips package versions
+already visible on npm and continues with the remaining packages.
 
 On `workflow_dispatch`, `tag` sets the release metadata, not the source checkout.
 Set `checkout_ref` explicitly to the tag to rebuild the original source, or to an approved
@@ -548,8 +565,8 @@ git tag -f desktop-v0.1.28 HEAD && git push fork desktop-v0.1.28 --force
 
 This ensures the checkout ref matches the approved code you want built, with the fix included. Both patterns rebuild Linux desktop assets only; npm publication is a separate release step.
 
-If you decide to publish a release without working desktop builds, inspect its
-assets first, then publish it manually:
+Only if the user explicitly approves a release without working desktop builds,
+inspect its assets and publish it manually:
 
 ```bash
 RELEASE_LOOKUP=$(node scripts/github-release.mjs --repo Proximyst/getpaseo-paseo --tag vX.Y.Z)
@@ -573,9 +590,8 @@ intentionally unavailable to desktop updater clients.
 - `release:prepare` refreshes workspace `node_modules` links to prevent stale types.
 - `npm run dev:desktop` and `npm run build:desktop` target the Linux Electron desktop package in
   `packages/desktop`.
-- If publication fails partway through, re-run the same shipping command. It skips already
-  published package versions, retries transient registry errors, and waits for each version
-  to become visible on npm before continuing.
+- `release:ship` and `release:ship:beta` are convenience commands that run `release:push` before
+  the matching npm publish command. They do not replace the pre-ship checks or approval.
 
 ## Changelog format
 
@@ -835,12 +851,12 @@ Every entry covers `previous stable release → release source`: first beta, lat
 - [ ] The diff from the previous stable to the resolved release source is classified as patch or minor, with the target version and rationale approved
 - [ ] `npm run release:prep:beta:patch`, `release:prep:beta:minor`, or `release:prep:beta:next` created the version commit on `release/vX.Y.Z-beta.N` without a tag, and the pushed branch passed `CI` and `Desktop Packages` before shipping (never relying on `main` CI)
 - [ ] Complete the [pre-release dependency checks](#pre-release-dependency-checks) on the release commit
-- [ ] After go-ahead, `npm run release:ship:beta` published npm and pushed the `vX.Y.Z-beta.N` tag without triggering a second CI run
-- [ ] npm shows the version under the `beta` dist-tag, not `latest`
+- [ ] After go-ahead, `npm run release:push` pushed `vX.Y.Z-beta.N` to `fork` without a second branch CI run; npm publication, reconciliation, and the heartbeat started without waiting for the build
+- [ ] All seven `@getpaseo/*` packages have the version on `beta`, not `latest`
 - [ ] The GitHub prerelease was published only after `beta-linux.yml` was uploaded, and it has the changelog body and every expected Linux desktop asset
 - [ ] GitHub `Desktop Release` workflow for the `v*-beta.N` tag is green
 - [ ] GitHub `Release Notes Sync` mirrored the beta entry into the prerelease body
-- [ ] The [reconcile PR](#reconcile-main) brought the shipped changelog entries and version into `main` without downgrading it, and `release/vX.Y.Z-beta.N` was deleted from `fork`
+- [ ] The [reconcile PR](#reconcile-main) merged the shipped entries and version into `main` without downgrading it, and `release/vX.Y.Z-beta.N` was deleted from `fork` only after all sync gates passed
 - [ ] The release heartbeat was created after the tag push and deleted only after every item above passed
 
 ### Stable release (or promotion)
@@ -850,15 +866,15 @@ Every entry covers `previous stable release → release source`: first beta, lat
 - [ ] The release base and changes match the [release base table](#release-base-and-source) and any approved [inventory](#release-inventory)
 - [ ] A promotion ships the tested beta's product content after its soak, unless the user explicitly overrode either default
 - [ ] Every PR in the release range has been opened, and its full description and every linked issue have been read before drafting the changelog
-- [ ] Update `CHANGELOG.md` with user-facing release notes (features, fixes — not refactors). Promotion renames the series' `## X.Y.Z-beta.N` entry to `## X.Y.Z - YYYY-MM-DD` and re-checks it covers the full release. Commit the matching [`CHANGELOG.zh-CN.md` entry](#changelog-translations) with it
+- [ ] Update `CHANGELOG.md` with user-facing release notes (features, fixes, not refactors). Promotion renames the series' `## X.Y.Z-beta.N` entry to `## X.Y.Z - YYYY-MM-DD` and re-checks it covers the full release. Commit the matching [`CHANGELOG.zh-CN.md` entry](#changelog-translations) with it
 - [ ] Verify the changelog heading follows strict `## X.Y.Z - YYYY-MM-DD` format
 - [ ] Ensure local format, lint, and typecheck pass and the working tree is clean before running `release:prep:*`
 - [ ] `npm run release:prep:patch`, `release:prep:minor`, or `release:prep:promote` created the version commit on `release/vX.Y.Z` without a tag, and the pushed branch passed `CI` and `Desktop Packages` before shipping (never relying on `main` CI)
 - [ ] Complete the [pre-release dependency checks](#pre-release-dependency-checks) on the release commit
-- [ ] After go-ahead, `npm run release:ship` published npm, updated dist-tags, and pushed the `vX.Y.Z` tag without triggering a second CI run
-- [ ] `latest` resolves to the new stable, and `beta` resolves to it too unless an active newer beta holds `beta`
+- [ ] After go-ahead, `npm run release:push` pushed `vX.Y.Z` to `fork` without a second branch CI run; npm publication, reconciliation, and the heartbeat started without waiting for the build
+- [ ] All seven `@getpaseo/*` packages have `latest` at the new stable and `beta` at that version unless an active newer beta holds it
 - [ ] The GitHub Release was published only after `latest-linux.yml` was uploaded, and it has the changelog body and every expected Linux desktop asset
 - [ ] GitHub `Desktop Release` workflow for the `v*` tag is green
 - [ ] GitHub `Release Notes Sync` is green and the release body matches the stable changelog entry
-- [ ] The [reconcile PR](#reconcile-main) brought the shipped changelog entries and version into `main` without downgrading it, and `release/vX.Y.Z` was deleted from `fork`
+- [ ] The [reconcile PR](#reconcile-main) merged the shipped entries and version into `main` without downgrading it, and `release/vX.Y.Z` was deleted from `fork` only after all sync gates passed
 - [ ] The release heartbeat was created after the tag push and deleted only after every item above passed
