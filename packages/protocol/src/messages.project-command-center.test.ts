@@ -61,6 +61,20 @@ describe("project command-center protocol", () => {
     });
   });
 
+  it("accepts an exact GitHub repository slug for inbox detail, not paths or remote URLs", () => {
+    const request = {
+      type: "forge.github.get_pull_request.request",
+      number: 12,
+      requestId: "req-pull",
+    };
+    expect(
+      SessionInboundMessageSchema.parse({ ...request, repository: "my-team/.github" }),
+    ).toEqual({ ...request, repository: "my-team/.github" });
+    for (const repository of ["https://github.com/my-team/repo", "my-team/a/b", "my-team/.."]) {
+      expect(SessionInboundMessageSchema.safeParse({ ...request, repository }).success).toBe(false);
+    }
+  });
+
   it.each([
     { status: "unavailable", reason: "gh_missing", message: "gh is missing" },
     { status: "unauthenticated", message: "sign in" },
@@ -166,7 +180,17 @@ describe("project command-center protocol", () => {
 
     expect(parsed.features?.workspaceGithubRepositorySearch).toBeUndefined();
     expect(parsed.features?.projectGithubClone).toBeUndefined();
+    expect(parsed.features?.githubPullRequestInboxAutoClone).toBeUndefined();
     expect(parsed.features?.projectCreateDirectory).toBeUndefined();
+  });
+
+  it("recognizes daemons that support PR Inbox auto-clone", () => {
+    const parsed = parseServerInfoStatusPayload({
+      status: "server_info",
+      serverId: "server-new",
+      features: { githubPullRequestInboxAutoClone: true },
+    });
+    expect(parsed.features?.githubPullRequestInboxAutoClone).toBe(true);
   });
 
   it("parses the agent thinking update capability", () => {

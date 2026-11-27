@@ -186,6 +186,51 @@ Facts modules use one source of truth: a Zod schema. Helpers like
 derive guards from `schema.safeParse` and re-parse before invoking typed
 derivers/renderers. That keeps typed derivers away from the open wire envelope.
 
+### GitHub Pull Requests inbox
+
+The inbox uses the selected daemon's authenticated `github.com` account, independent of any
+checkout. Because a search can return private pull requests from outside registered projects,
+the daemon requires `access.manage` for inbox search and detail. Checkout-scoped forge features
+retain their existing permissions.
+
+**My own** lists your open pull requests, and **Review requested** lists open pull requests
+awaiting your review. Use **Open PR** to open a `github.com` pull request by URL or
+`owner/repo#number`, or find one with a GitHub search query. Pull request details open in
+separate tabs you can close without leaving the inbox.
+Refreshing a detail tab updates it from GitHub without depending on a search result.
+
+GitHub's merge state, Paseo's checkout-specific Merge action, and repository deployment reports
+answer different questions. A failed check or unresolved thread does not by itself explain a
+blocked merge. Keep repository integrations scoped to their repository and source-link the evidence.
+For `grafana/deployment_tools`, Atlantis comments report plan or apply events, Kubernetes exporter
+comments describe a manifest preview, and Policy Bot reports a check status. None of these proves
+that a revision deployed successfully, and the inbox does not post deployment commands.
+
+**Projects only** filters inbox search results to repositories with a registered Project
+on the selected host. Matching uses effective GitHub fetch remotes, including upstream
+remotes. Opening a PR by URL or `owner/repo#number` ignores the filter.
+
+Set **Default clone directory** in the inbox options for a host to allow **Check out PR**
+to clone a missing Project. A directory such as `~/work` resolves on that host; Paseo
+uses `<directory>/<owner>/<repo>` for the PR's base repository. If the destination already
+exists, Paseo registers it only when it is a Git checkout root with a commit and a matching
+fetch remote. Otherwise it reports the conflict. A new clone runs Git directly in the
+destination; leave that directory alone until Git finishes. Opening or refreshing the
+inbox never clones.
+
+The daemon verifies the selected Project's fetch remote before fetching the PR.
+Checkout uses the standard worktree flow, including any configured worktree manager.
+PRs from forks retain the ordinary untrusted-workspace safeguards.
+
+After checkout, the app opens an ordinary OMP draft in the new workspace with a built-in
+review prompt. It asks for a read-only review and concrete findings grounded in the diff,
+with file and line references, impact, and suggested fixes. There is no preset to configure:
+edit the draft directly before sending. No agent starts until you send it, and the review
+prompt asks for findings in the conversation, not edits or GitHub posts.
+
+Previously created isolated reviews keep their restricted session and worktree
+behavior.
+
 ## Checklist
 
 To add `acme`:

@@ -30,6 +30,7 @@ import {
   normalizeBaseRefName,
   isQualifiedRef,
   type PaseoWorktreeChangeRequestHint,
+  type WorktreeReview,
   readPaseoWorktreeMetadata,
   readPaseoWorktreeRuntimePort,
   writePaseoWorktreeMetadata,
@@ -272,7 +273,7 @@ export type WorktreeSource =
     }
   | { kind: "checkout-branch"; branchName: string }
   | { kind: "restore"; branchName: string; baseRef: string | null }
-  | { kind: "restore-commit"; commit: string; baseRef: string }
+  | { kind: "restore-commit"; commit: string; baseRef: string; review?: WorktreeReview }
   | { kind: "restore-from-base"; baseRef: string; branchName: string }
   | {
       kind: "checkout-change-request";
@@ -1878,6 +1879,7 @@ async function createWorktreeAtRepositoryRoot({
 }: CreateWorktreeOptions): Promise<
   Omit<CreatedWorktree, "branchName"> & { branchName: string | null }
 > {
+  const review = source.kind === "restore-commit" ? source.review : undefined;
   const branchesBefore =
     source.kind === "checkout-branch" ||
     source.kind === "checkout-change-request" ||
@@ -1895,6 +1897,7 @@ async function createWorktreeAtRepositoryRoot({
     fetchedBranch && !branchesBefore.has(fetchedBranch)
       ? await readLocalBranchTip(cwd, fetchedBranch)
       : null;
+  let addedReviewPath: string | undefined;
   try {
     let worktreePath =
       explicitWorktreePath ??
@@ -1902,32 +1905,39 @@ async function createWorktreeAtRepositoryRoot({
     await mkdir(dirname(worktreePath), { recursive: true });
 
     // Primitive owner for `git worktree add`; callers route through createWorktreeCore.
-    await runGitCommand(["worktree", "add", worktreePath, ...sourcePlan.addArguments], {
-      cwd,
-      timeout: 120_000,
-    });
+    await runGitCommand(
+      [
+        ...(review
+          ? [
+              "--no-replace-objects",
+              "-c",
+              "core.hooksPath=/dev/null",
+              "-c",
+              "core.fsmonitor=false",
+              "-c",
+              "submodule.recurse=false",
+            ]
+          : []),
+        "worktree",
+        "add",
+        worktreePath,
+        ...sourcePlan.addArguments,
+      ],
+      { cwd, timeout: 120_000 },
+    );
+    if (review) addedReviewPath = worktreePath;
     worktreePath = await normalizePathForOwnership(worktreePath);
-
-    if (sourcePlan.branchName) {
-      await applyWorktreeRemotePlan(cwd, sourcePlan.branchName, sourcePlan);
-    }
-
-    await writePaseoWorktreeMetadata(worktreePath, {
-      baseRefName: sourcePlan.metadataBaseRefName,
-      ...(sourcePlan.metadataBaseRef ? { baseRef: sourcePlan.metadataBaseRef } : {}),
-      ...(sourcePlan.changeRequestLookupTarget
-        ? { changeRequestLookupTarget: sourcePlan.changeRequestLookupTarget }
-        : {}),
-    });
-
-    await seedPaseoConfigFile({ sourceCwd: cwd, targetCwd: worktreePath });
-
+    await configureCreatedWorktree(cwd, worktreePath, sourcePlan, review);
     return {
       branchName: sourcePlan.branchName,
       worktreePath,
-      comparisonBaseRef: sourcePlan.metadataBaseRef ?? sourcePlan.metadataBaseRefName,
+      comparisonBaseRef:
+        review?.baseSha ?? sourcePlan.metadataBaseRef ?? sourcePlan.metadataBaseRefName,
     };
   } catch (error) {
+    if (addedReviewPath) {
+      await runGitCommand(["worktree", "remove", addedReviewPath], { cwd }).catch(() => {});
+    }
     if (
       fetchedBranch &&
       fetchedTip &&
@@ -2457,6 +2467,30 @@ async function resolveWorktreeMetadata(options: {
       ? await tryResolveExactBaseRef(cwd, source.baseRef)
       : undefined);
   return { metadataBaseRefName, ...(metadataBaseRef ? { metadataBaseRef } : {}) };
+}
+
+async function configureCreatedWorktree(
+  cwd: string,
+  worktreePath: string,
+  sourcePlan: WorktreeSourcePlan,
+  review: WorktreeReview | undefined,
+): Promise<void> {
+  if (review) {
+    // Keep the base object reachable for the lifetime of this worktree.
+    await runGitCommand(["update-ref", "refs/worktree/paseo-review-base", review.baseSha], {
+      cwd: worktreePath,
+    });
+  }
+  if (sourcePlan.branchName) {
+    await applyWorktreeRemotePlan(cwd, sourcePlan.branchName, sourcePlan);
+  }
+  await writePaseoWorktreeMetadata(worktreePath, {
+    baseRefName: sourcePlan.metadataBaseRefName,
+    baseRef: review?.baseSha ?? sourcePlan.metadataBaseRef,
+    changeRequestLookupTarget: sourcePlan.changeRequestLookupTarget,
+    review,
+  });
+  if (!review) await seedPaseoConfigFile({ sourceCwd: cwd, targetCwd: worktreePath });
 }
 
 interface ResolveWorktreeSourcePlanOptions {

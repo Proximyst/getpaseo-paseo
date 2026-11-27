@@ -31,6 +31,7 @@ import { resolveFirstAgentPromptTitle } from "./agent/create-agent-title.js";
 import { buildAgentBranchNameSeed } from "./agent/prompt-attachments.js";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
 import { runWithGitCommandPriority } from "../utils/run-git-command.js";
+import { workspaceReviewSource } from "./workspace-automation-gate.js";
 
 export interface CreatePaseoWorktreeInput extends CreateWorktreeCoreInput {
   workspaceId?: string;
@@ -85,8 +86,10 @@ async function createPaseoWorktreeWithPriority(
 ): Promise<CreatePaseoWorktreeResult> {
   const workspaceCwdPlan = await planWorkspaceCwdForWorktree(input.cwd, deps.workspaceGitService);
   const createdWorktree = await createWorktreeCore(input, deps);
+  const untrustedSource =
+    workspaceReviewSource(createdWorktree.review) ?? createdWorktree.untrustedSource;
   try {
-    if (createdWorktree.created) {
+    if (createdWorktree.created && !createdWorktree.review) {
       await deps.lifecycle?.wait("worktree.create.after", {
         worktree: {
           path: createdWorktree.worktree.worktreePath,
@@ -95,7 +98,9 @@ async function createPaseoWorktreeWithPriority(
         },
       });
     }
-    await maybeMarkFirstAgentBranchAutoNameEligible({ createdWorktree, input });
+    if (!createdWorktree.review) {
+      await maybeMarkFirstAgentBranchAutoNameEligible({ createdWorktree, input });
+    }
     const workspaceCwd = mapWorkspaceRelativeCwdToWorktree({
       relativeWorkspaceCwd: workspaceCwdPlan.relativeWorkspaceCwd,
       targetWorktreePath: createdWorktree.worktree.worktreePath,
@@ -103,8 +108,14 @@ async function createPaseoWorktreeWithPriority(
     if (!(await isDirectory(workspaceCwd))) {
       throw new Error(`Selected project directory is missing from the worktree: ${workspaceCwd}`);
     }
+    if (
+      createdWorktree.review &&
+      getRealpathAwareRelativePath(createdWorktree.worktree.worktreePath, workspaceCwd) === null
+    ) {
+      throw new Error("Selected review project directory is outside the review worktree");
+    }
 
-    if (createdWorktree.created) {
+    if (createdWorktree.created && !createdWorktree.review) {
       await seedPaseoConfigFile({
         sourceCwd: workspaceCwdPlan.inputCwd,
         targetCwd: workspaceCwd,
@@ -122,10 +133,10 @@ async function createPaseoWorktreeWithPriority(
       worktreeManagerPluginId: createdWorktree.worktree.worktreeManagerPluginId ?? null,
       title: input.title?.trim() || resolveFirstAgentPromptTitle(input.firstAgentContext),
       metadata: input.metadata,
-      expectsInitialAgent: Boolean(input.firstAgentContext),
+      expectsInitialAgent: !createdWorktree.review && Boolean(input.firstAgentContext),
       background: input.background,
       callerWorkspaceId: input.callerWorkspaceId,
-      untrustedSource: createdWorktree.untrustedSource,
+      untrustedSource,
     });
 
     deps.github.invalidate({ cwd: createdWorktree.worktree.worktreePath });
@@ -151,7 +162,7 @@ async function createPaseoWorktreeWithPriority(
         worktreeManagers: deps.worktreeManagers,
         worktreeManagerPluginId: createdWorktree.worktree.worktreeManagerPluginId ?? null,
         removeReason: "rollback",
-        untrusted: Boolean(createdWorktree.untrustedSource),
+        untrusted: Boolean(untrustedSource),
       },
       error,
     );

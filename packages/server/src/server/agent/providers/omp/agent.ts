@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
@@ -124,6 +124,15 @@ import {
   mapOmpRpcUiPermissionRequest,
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
+import {
+  bindReviewRepository,
+  buildReviewStartInput,
+  createReviewToolCatalog,
+  isReviewSessionFile,
+  OMP_REVIEW_MODE,
+  readReviewCommits,
+  resolveReviewSessionFile,
+} from "./pull-request-review.js";
 
 const OMP_PROVIDER = "omp";
 const OMP_CORE_CAPABILITIES: AgentCapabilityFlags = {
@@ -137,6 +146,14 @@ const OMP_CORE_CAPABILITIES: AgentCapabilityFlags = {
   supportsRewindConversation: true,
   supportsRewindFiles: false,
   supportsRewindBoth: false,
+};
+
+const OMP_REVIEW_CAPABILITIES: AgentCapabilityFlags = {
+  ...OMP_CORE_CAPABILITIES,
+  supportsSessionListing: false,
+  supportsDynamicModes: false,
+  supportsMcpServers: false,
+  supportsRewindConversation: false,
 };
 
 export interface OmpAgentClientOptions {
@@ -308,6 +325,23 @@ async function renderTextOnlyImageHint(image: { data: string; mimeType: string }
   } catch (error) {
     return `[Image attachment omitted: failed to write local file (${toDiagnosticErrorMessage(error)})]`;
   }
+}
+
+function reviewPromptText(prompt: AgentPromptInput): string {
+  const text =
+    typeof prompt === "string"
+      ? prompt
+      : prompt
+          .map((block) => {
+            if (block.type !== "text") throw new Error("Pull request review only accepts text");
+            return block.text;
+          })
+          .join("\n\n");
+  // OMP handles RPC slash commands itself, even when extension discovery is disabled.
+  if (text.trimStart().startsWith("/")) {
+    throw new Error("Slash commands are not available in pull request review");
+  }
+  return text;
 }
 
 async function convertPromptInput(
@@ -597,7 +631,7 @@ function createRuntime(
 
 class OmpHistorySession implements AgentSession {
   readonly provider: AgentProvider;
-  readonly capabilities: AgentCapabilityFlags = withOmpCapabilities();
+  readonly capabilities: AgentCapabilityFlags;
 
   constructor(
     private readonly handle: AgentPersistenceHandle,
@@ -608,6 +642,9 @@ class OmpHistorySession implements AgentSession {
     private readonly logger: Logger,
   ) {
     this.provider = provider;
+    this.capabilities = config.config.launchProfile
+      ? OMP_REVIEW_CAPABILITIES
+      : withOmpCapabilities();
   }
 
   get id(): string | null {
@@ -650,7 +687,7 @@ class OmpHistorySession implements AgentSession {
   }
 
   async getAvailableModes(): Promise<AgentMode[]> {
-    return [...OMP_MODES];
+    return this.config.config.launchProfile ? [OMP_REVIEW_MODE] : [...OMP_MODES];
   }
 
   async getCurrentMode(): Promise<string | null> {
@@ -680,7 +717,7 @@ class OmpHistorySession implements AgentSession {
 
 export class OmpAgentSession implements AgentSession {
   readonly provider: AgentProvider = OMP_PROVIDER;
-  readonly capabilities: AgentCapabilityFlags = withOmpCapabilities();
+  readonly capabilities: AgentCapabilityFlags;
 
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly activeToolCalls = new Map<string, OmpTrackedToolCall>();
@@ -747,8 +784,13 @@ export class OmpAgentSession implements AgentSession {
     this.hostTools = options.hostTools;
     this.restartRuntime = options.restartRuntime;
     this.config = options.config;
+    this.capabilities = options.config.launchProfile
+      ? OMP_REVIEW_CAPABILITIES
+      : withOmpCapabilities();
     this.state = options.initialState;
-    this.openOptionsPatch = this.fastModeDifference(options.config.providerOptions?.fast_mode);
+    this.openOptionsPatch = options.config.launchProfile
+      ? {}
+      : this.fastModeDifference(options.config.providerOptions?.fast_mode);
     // A replacement runtime starts from the Fast this one opened with, not the one it was asked for.
     if (typeof this.openOptionsPatch.fast_mode === "boolean")
       this.rememberFastMode(this.openOptionsPatch.fast_mode);
@@ -790,6 +832,7 @@ export class OmpAgentSession implements AgentSession {
     this.unsubscribeRuntime = runtime.onEvent((event) => {
       if (!this.closed && runtime === this.runtimeSession) this.handleRuntimeEvent(event);
     });
+    if (this.config.launchProfile) return;
     void runtime.setSubagentSubscription("events").catch((eventsError: unknown) => {
       this.logger.debug(
         { err: eventsError },
@@ -812,7 +855,7 @@ export class OmpAgentSession implements AgentSession {
   }
 
   get controls(): AgentOptionControl[] {
-    if (!hasOmpFastMode(this.state)) return [];
+    if (this.config.launchProfile || !hasOmpFastMode(this.state)) return [];
     return [
       {
         type: "toggle",
@@ -827,6 +870,9 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async applyOptions(options: ProviderOptions): Promise<Record<string, unknown>> {
+    if (this.config.launchProfile) {
+      throw new Error("Provider options cannot be changed in pull request review");
+    }
     assertChangesAreLive({
       provider: "omp",
       patch: options,
@@ -900,6 +946,7 @@ export class OmpAgentSession implements AgentSession {
     if (this.activeTurnId) {
       throw new Error("An OMP turn is already active");
     }
+    const reviewText = this.config.launchProfile ? reviewPromptText(prompt) : undefined;
 
     const turnId = randomUUID();
     this.live = true;
@@ -912,7 +959,10 @@ export class OmpAgentSession implements AgentSession {
     this.activeTurnHasUserMessage = false;
     this.activePromptRequestId = null;
     this.clearNoTurnBuffers();
-    const payload = await convertPromptInput(prompt, { model: this.state.model });
+    const payload =
+      reviewText === undefined
+        ? await convertPromptInput(prompt, { model: this.state.model })
+        : { text: reviewText, images: undefined };
     if (this.closed) throw new Error("OMP session is closed");
     if (this.activeTurnId !== turnId) return { turnId };
     this.rememberClientMessage(options?.clientMessageId ?? null, payload.text);
@@ -982,7 +1032,9 @@ export class OmpAgentSession implements AgentSession {
   ): Promise<SteerResult> {
     if (this.closed || this.activeTurnId !== options.expectedTurnId)
       return { status: "unavailable" };
-    const payload = await convertPromptInput(prompt, { model: this.state.model });
+    const payload = this.config.launchProfile
+      ? { text: reviewPromptText(prompt), images: undefined }
+      : await convertPromptInput(prompt, { model: this.state.model });
     if (this.closed || this.activeTurnId !== options.expectedTurnId)
       return { status: "unavailable" };
     if (this.parseSlashCommandInput(payload.text)) return { status: "unavailable" };
@@ -1093,7 +1145,7 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async getAvailableModes(): Promise<AgentMode[]> {
-    return [...OMP_MODES];
+    return this.config.launchProfile ? [OMP_REVIEW_MODE] : [...OMP_MODES];
   }
 
   async getCurrentMode(): Promise<string | null> {
@@ -1101,6 +1153,10 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async setMode(modeId: string): Promise<void | AgentProviderNotice> {
+    if (this.config.launchProfile) {
+      if (modeId !== OMP_REVIEW_MODE.id) throw new Error("Pull request review is findings-only");
+      return;
+    }
     if (!OMP_MODES.some((mode) => mode.id === modeId)) {
       throw new Error(`Invalid OMP mode '${modeId}'`);
     }
@@ -1195,6 +1251,13 @@ export class OmpAgentSession implements AgentSession {
       nativeHandle: this.state.sessionFile,
       metadata: {
         cwd: this.config.cwd,
+        ...(this.config.launchProfile
+          ? {
+              launchProfile: this.config.launchProfile,
+              reviewHeadSha: this.config.reviewHeadSha,
+              reviewBaseSha: this.config.reviewBaseSha,
+            }
+          : {}),
         ...(this.hostTools?.bridge
           ? { bridgedTools: [...this.hostTools.bridge.toolIdentities()] }
           : {}),
@@ -1221,6 +1284,8 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async revertConversation(input: { messageId: string }): Promise<void> {
+    if (this.config.launchProfile)
+      throw new Error("Rewind is not available in pull request review");
     if (this.activeTurnId) {
       throw new Error("Cannot rewind the OMP conversation while a turn is active");
     }
@@ -1306,6 +1371,7 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async listCommands(): Promise<AgentSlashCommand[]> {
+    if (this.config.launchProfile) return [];
     if (this.commandCache) {
       return this.commandCache;
     }
@@ -1316,6 +1382,7 @@ export class OmpAgentSession implements AgentSession {
   tryHandleOutOfBand(
     prompt: AgentPromptInput,
   ): { run(ctx: { emit: (event: AgentStreamEvent) => void }): Promise<void> } | null {
+    if (this.config.launchProfile) return null;
     if (typeof prompt !== "string") {
       return null;
     }
@@ -1634,6 +1701,10 @@ export class OmpAgentSession implements AgentSession {
   ): void {
     if (event.method === "cancel") {
       if (event.targetId) this.closeExtensionUiRequest(event.targetId);
+      return;
+    }
+    if (this.config.launchProfile) {
+      this.runtimeSession.cancelExtensionUiRequest(event.id);
       return;
     }
     const message = optionalString(event.message);
@@ -2483,6 +2554,7 @@ export class OmpAgentClient implements AgentClient {
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
+    if (config.launchProfile) return this.openReviewSession(config);
     const launchMode = this.resolveLaunchMode(config.modeId, config.providerOptions);
     const startInput: OmpStartSessionInput = {
       cwd: config.cwd,
@@ -2549,6 +2621,43 @@ export class OmpAgentClient implements AgentClient {
 
     const persistenceMetadata = parsePersistenceMetadata(handle.metadata);
     const resumeConfig = buildResumeConfig(persistenceMetadata, overrides, this.provider);
+    const metadata = handle.metadata;
+    const savedReview = metadata?.launchProfile === "pull-request-review";
+    if (savedReview !== (await isReviewSessionFile(sessionFile))) {
+      throw new Error(
+        "An OMP review session can only resume as its original isolated review agent",
+      );
+    }
+    if (savedReview) {
+      const config: AgentSessionConfig = {
+        provider: this.provider,
+        cwd: persistenceMetadata.cwd ?? "",
+        model: resumeConfig.model,
+        thinkingOptionId: resumeConfig.thinkingOptionId,
+        modeId: OMP_REVIEW_MODE.id,
+        launchProfile: "pull-request-review",
+        reviewHeadSha:
+          typeof metadata?.reviewHeadSha === "string" ? metadata.reviewHeadSha : undefined,
+        reviewBaseSha:
+          typeof metadata?.reviewBaseSha === "string" ? metadata.reviewBaseSha : undefined,
+      };
+      readReviewCommits(config);
+      const reviewSessionFile = await resolveReviewSessionFile(sessionFile, handle.sessionId);
+      if (options?.purpose !== "history") {
+        return this.openReviewSession(config, { file: reviewSessionFile, id: handle.sessionId });
+      }
+      return new OmpHistorySession(
+        handle,
+        { ...resumeConfig, cwd: config.cwd, modeId: config.modeId, config },
+        reviewSessionFile,
+        this.provider,
+        new Map(),
+        this.logger,
+      );
+    }
+    if (overrides?.launchProfile) {
+      throw new Error("An OMP review session cannot be created by overriding a resume handle");
+    }
 
     if (options?.purpose === "history") {
       return new OmpHistorySession(
@@ -2608,6 +2717,106 @@ export class OmpAgentClient implements AgentClient {
       await runtimeSession.close().catch(() => undefined);
       throw error;
     }
+  }
+
+  private async resolveReviewCommand(): Promise<[string, ...string[]]> {
+    const launch = await resolveProviderLaunch({
+      commandConfig: this.runtimeSettings?.command,
+      defaultBinary: "omp",
+    });
+    const { resolvedPath } = await checkProviderLaunchAvailable({
+      ...launch,
+      env: { ...process.env, ...this.runtimeSettings?.env },
+    });
+    if (!resolvedPath) throw new Error("The configured omp executable is unavailable for review");
+    if (this.runtimeSettings?.command?.mode === "replace") {
+      const separator = launch.args.indexOf("--");
+      if (separator !== -1) {
+        const executable = launch.args[separator + 1];
+        if (!executable || !["omp", "omp.exe"].includes(basename(executable))) {
+          throw new Error("An omp review wrapper must use `wrapper [options] -- omp`");
+        }
+        // Preserve the wrapper transport, not ordinary omp flags that can enable discovery.
+        return [resolvedPath, ...launch.args.slice(0, separator + 2)];
+      }
+    }
+    return [resolvedPath];
+  }
+
+  private async openReviewSession(
+    requested: AgentSessionConfig,
+    initialResume?: { file: string; id: string },
+  ): Promise<AgentSession> {
+    const { head, base } = readReviewCommits(requested);
+    const config: AgentSessionConfig = {
+      provider: this.provider,
+      cwd: requested.cwd,
+      model: requested.model,
+      thinkingOptionId: requested.thinkingOptionId,
+      launchProfile: "pull-request-review",
+      reviewHeadSha: head,
+      reviewBaseSha: base,
+      modeId: OMP_REVIEW_MODE.id,
+    };
+    const runtime =
+      this.runtime ??
+      new OmpCliRuntime({ logger: this.logger, command: await this.resolveReviewCommand() });
+    const start = async (resume?: { file: string; id: string }) => {
+      const repo = await bindReviewRepository(config.cwd, { head, base });
+      const input = await buildReviewStartInput(repo, process.env, resume?.file);
+      const runtimeSession = await runtime.startSession({
+        ...input,
+        // The resumed model is restored from native history; verify any explicit model below.
+        model: resume ? undefined : config.model,
+        thinkingOptionId: normalizeOmpThinkingOption(config.thinkingOptionId) ?? undefined,
+      });
+      const catalog = createReviewToolCatalog(repo);
+      const hostTools = new OmpHostToolRouter({ runtimeSession, catalog, logger: this.logger });
+      try {
+        const names = await hostTools.register();
+        if (
+          names.length !== catalog.tools.size ||
+          new Set(names).size !== catalog.tools.size ||
+          names.some((name) => !catalog.tools.has(name))
+        ) {
+          throw new Error("OMP did not register the exact pull request review tools");
+        }
+        const state = resume
+          ? await this.applyResumeModel(runtimeSession, config.model)
+          : await runtimeSession.getState();
+        if (resume && (state.sessionId !== resume.id || state.sessionFile !== resume.file)) {
+          throw new Error("OMP did not resume the original isolated review session");
+        }
+        if (config.model && modelToId(state.model) !== config.model) {
+          throw new Error(`OMP did not select the requested review model "${config.model}"`);
+        }
+        return { runtimeSession, hostTools, state };
+      } catch (error) {
+        await hostTools.close();
+        await runtimeSession.close().catch(() => undefined);
+        throw error;
+      }
+    };
+    const { runtimeSession, hostTools, state } = await start(initialResume);
+    return new OmpAgentSession({
+      runtimeSession,
+      hostTools,
+      restartRuntime: async (file) => {
+        if (!file) throw new Error("OMP review restart requires its isolated session file");
+        const id = state.sessionId;
+        if (!id) throw new Error("OMP review restart requires its original session ID");
+        return start({ file: await resolveReviewSessionFile(file, id), id });
+      },
+      config,
+      initialState: state,
+      currentModeId: OMP_REVIEW_MODE.id,
+      logger: this.logger,
+      providerIdleScheduler: this.providerIdleScheduler,
+      noTurnScheduler: this.noTurnScheduler,
+      usagePollScheduler: this.usagePollScheduler,
+      providerIdleDeadlineMs: this.providerIdleDeadlineMs,
+      live: !initialResume,
+    });
   }
 
   // OMP resumes a session on the model it recorded, or on its default when that model

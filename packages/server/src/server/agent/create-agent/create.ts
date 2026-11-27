@@ -236,19 +236,19 @@ async function resolveSessionCreateAgent(
 ): Promise<ResolvedCreateAgent> {
   const trimmedPrompt = input.initialPrompt?.trim();
   const builtSessionConfig = foldFeatureValues(input.config);
-  const resolvedCreateConfig = await dependencies.providerSnapshotManager.resolveCreateConfig({
-    cwd: builtSessionConfig.cwd,
-    provider: builtSessionConfig.provider,
-    requestedMode: builtSessionConfig.modeId,
-    providerOptions: builtSessionConfig.providerOptions,
-    parent: null,
-    unattended: false,
-  });
-  const sessionConfig: AgentSessionConfig = {
-    ...builtSessionConfig,
-    modeId: resolvedCreateConfig.modeId,
-    providerOptions: resolvedCreateConfig.providerOptions,
-  };
+  const sessionConfig: AgentSessionConfig = builtSessionConfig.launchProfile
+    ? builtSessionConfig
+    : {
+        ...builtSessionConfig,
+        ...(await dependencies.providerSnapshotManager.resolveCreateConfig({
+          cwd: builtSessionConfig.cwd,
+          provider: builtSessionConfig.provider,
+          requestedMode: builtSessionConfig.modeId,
+          providerOptions: builtSessionConfig.providerOptions,
+          parent: null,
+          unattended: false,
+        })),
+      };
   const prompt = buildAgentPrompt(trimmedPrompt ?? "", input.images, input.attachments);
   const hasPromptContent = Array.isArray(prompt) ? prompt.length > 0 : prompt.length > 0;
   const clientMessageId = normalizeClientMessageId(input.clientMessageId);

@@ -128,6 +128,17 @@ describe("persistence hooks", () => {
     });
   });
 
+  test("restores the exact review launch profile and commit pins from stored config", () => {
+    const config = {
+      launchProfile: "pull-request-review" as const,
+      reviewHeadSha: "a".repeat(40),
+      reviewBaseSha: "b".repeat(40),
+    };
+    const record = createRecord({ config });
+    expect(buildConfigOverrides(record)).toMatchObject(config);
+    expect(buildSessionConfig(record)).toMatchObject(config);
+  });
+
   test("buildConfigOverrides drops persisted internal paseo MCP server", () => {
     const record = createRecord({
       config: {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { useAddProjectFlowStore } from "@/stores/add-project-flow-store";
 import {
   applyAvailableAddProjectHosts,
   selectableAddProjectHosts,
@@ -19,8 +20,10 @@ import {
   buildManualGithubRepositoryChoices,
   checkoutName,
   defaultProjectLocation,
+  getLastCloneParent,
   joinDirectoryPath,
   parentDirectory,
+  rememberCloneParent,
   validateNewFolderName,
 } from "./options";
 import { resolveActiveIndex } from "./tab-view";
@@ -212,6 +215,27 @@ describe("Add Project options", () => {
     expect(defaultProjectLocation({ remembered: "~/work", projectPaths: ["/code/app"] })).toBe(
       "~/work",
     );
+  });
+
+  it("shares clone parents with Add Project without treating new folders as clones", () => {
+    const hostId = "clone-history-host";
+    const otherHostId = "separate-history-host";
+    const { rememberLocation } = useAddProjectFlowStore.getState();
+
+    rememberLocation(hostId, "/folders", "new-folder");
+    expect(getLastCloneParent(hostId)).toBeUndefined();
+
+    rememberCloneParent(hostId, "/clones");
+    rememberCloneParent(otherHostId, "/other");
+    expect(useAddProjectFlowStore.getState().locationsByHost[hostId]?.lastLocation).toBe("/clones");
+    expect(getLastCloneParent(hostId)).toBe("/clones");
+
+    rememberLocation(hostId, "/new-folders", "new-folder");
+    expect(useAddProjectFlowStore.getState().locationsByHost[hostId]?.lastLocation).toBe(
+      "/new-folders",
+    );
+    expect(getLastCloneParent(hostId)).toBe("/clones");
+    expect(getLastCloneParent(otherHostId)).toBe("/other");
   });
 
   it("keeps a drive or filesystem root when deriving and joining a location", () => {

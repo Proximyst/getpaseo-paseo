@@ -1,5 +1,5 @@
 import { router, usePathname } from "expo-router";
-import { CalendarClock, History, Plus, Search } from "lucide-react-native";
+import { CalendarClock, GitPullRequest, History, Plus, Search } from "lucide-react-native";
 import { memo, useCallback, useMemo, useRef, type ComponentType, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { View, type StyleProp, type ViewStyle } from "react-native";
@@ -9,6 +9,7 @@ import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { PluginSidebarItem } from "@/plugins/sidebar-items";
 import { canCreateWorktreeForProjectKind } from "@/projects/host-projects";
 import { useHostFeature } from "@/runtime/host-features";
+import { useHosts } from "@/runtime/host-runtime";
 import {
   builtinSidebarNavLabelKey,
   builtinSidebarNavShortcutAction,
@@ -16,12 +17,17 @@ import {
 } from "@/sidebar-nav/model";
 import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
-import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
+import {
+  useActiveWorkspaceSelection,
+  useLastWorkspaceSelection,
+} from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import {
+  buildHostPullRequestsRoute,
   buildNewWorkspaceRoute,
   buildSchedulesRoute,
   buildSessionsRoute,
+  parseServerIdFromPathname,
 } from "@/utils/host-routes";
 
 interface SidebarNavRowProps {
@@ -190,11 +196,41 @@ function SidebarSchedulesRow({ onBeforeNavigate }: SidebarNavRowProps) {
   );
 }
 
+function SidebarPullRequestsRow({ onBeforeNavigate }: SidebarNavRowProps) {
+  const { t } = useTranslation();
+  const pathname = usePathname();
+  const hosts = useHosts();
+  const lastWorkspace = useLastWorkspaceSelection();
+  const routeServerId = parseServerIdFromPathname(pathname);
+  const preferredHostId = routeServerId ?? lastWorkspace?.serverId;
+  const host = hosts.find((entry) => entry.serverId === preferredHostId) ?? hosts[0];
+
+  const href = host ? buildHostPullRequestsRoute(host.serverId) : null;
+  const isActive = routeServerId === host?.serverId && pathname.endsWith("/pull-requests");
+  const handlePress = useCallback(() => {
+    onBeforeNavigate?.();
+    if (href && !isActive) router.push(href);
+  }, [href, isActive, onBeforeNavigate]);
+
+  if (!href) return null;
+  return (
+    <SidebarHeaderRow
+      icon={GitPullRequest}
+      label={t(builtinSidebarNavLabelKey("pull-requests"))}
+      onPress={handlePress}
+      isActive={isActive}
+      testID="sidebar-pull-requests"
+      variant="compact"
+    />
+  );
+}
+
 const BUILTIN_ROWS: Record<BuiltinSidebarNavId, ComponentType<SidebarNavRowProps>> = {
   "new-workspace": SidebarNewWorkspaceRow,
   history: SidebarHistoryRow,
   search: SidebarSearchRow,
   schedules: SidebarSchedulesRow,
+  "pull-requests": SidebarPullRequestsRow,
 };
 
 const styles = StyleSheet.create({

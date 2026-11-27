@@ -1348,6 +1348,28 @@ export const es: TranslationResources = {
       sessions: "Historial",
       search: "Buscar",
       schedules: "Horarios",
+      githubPullRequests: "PR de GitHub",
+    },
+    pullRequestInbox: {
+      checkout: "Cambiar a la PR",
+      mine: "Mis PR",
+      reviewRequested: "Revisión solicitada",
+      open: "Abrir PR",
+      reference: "URL o referencia de la PR en GitHub",
+      invalidReference:
+        "Introduce una URL de una PR de GitHub o una referencia como owner/repo#123.",
+      updateHostToOpen: "Actualiza Paseo en este host para abrir PR por URL o referencia.",
+      searchQuery: "Consulta de búsqueda en GitHub",
+      options: "Opciones de la bandeja de PR",
+      projectsOnly: "Solo proyectos",
+      cloneDirectory: "Directorio de clonación predeterminado",
+      cloneDirectoryHint:
+        "Elige un directorio en este host para clonar los proyectos que falten en subdirectorios owner/repo. Déjalo en blanco para desactivar la clonación automática.",
+      preferencesError: "No se pudieron cargar las preferencias de la bandeja.",
+      matchingProjects: "Buscando los proyectos de las PR…",
+      projectMatchError: "No se pudieron asociar las PR con los proyectos: {{message}}",
+      noProjectPullRequests: "Ninguna PR de tus proyectos coincide con esta vista.",
+      noProjectPullRequestsOnLoadedPages: "No hay PR de tus proyectos en las páginas cargadas.",
     },
     worktreeSetup: {
       title: "Configurar secuencias de comandos del árbol de trabajo",

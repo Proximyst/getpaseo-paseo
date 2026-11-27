@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, test, afterEach } from "vitest";
+import { describe, expect, test, afterEach, vi } from "vitest";
 import type { ForgeService } from "../services/forge-service.js";
 import { createGitLabService } from "../services/gitlab-service.js";
 import {
@@ -37,6 +37,11 @@ import {
 import { createWorktreeCore as createCoreWorktree } from "./worktree-core.js";
 import { isPlatform } from "../test-utils/platform.js";
 import { createWithWorktrunk } from "../../../../plugin-examples/worktrunk/server/wt.js";
+import {
+  assertWorkspaceAutomationAllowedForWorkspace,
+  clearWorkspaceAutomationBlock,
+} from "./workspace-automation-gate.js";
+import { createPersistedWorkspaceRecord } from "./workspace-registry.js";
 
 function createGitHubServiceStub(): ForgeService {
   return {
@@ -407,6 +412,7 @@ describe.skipIf(isPlatform("win32"))("worktree-core POSIX-only", () => {
     const cleanupPaths: string[] = [];
 
     afterEach(() => {
+      vi.unstubAllEnvs();
       for (const target of cleanupPaths.splice(0)) {
         rmSync(target, { recursive: true, force: true });
       }
@@ -741,6 +747,255 @@ describe.skipIf(isPlatform("win32"))("worktree-core POSIX-only", () => {
       });
       expect(result.worktree.branchName).toBe("pr-123");
     });
+
+    test("binds a managed fork PR checkout to the selected GitHub base repository", async () => {
+      vi.stubEnv("GIT_CONFIG_GLOBAL", "/dev/null");
+      vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+      vi.stubEnv("GIT_ALLOW_PROTOCOL", "file:ssh");
+      vi.stubEnv("GIT_SSH_COMMAND", "sh .git/test-ssh");
+      vi.stubEnv("GIT_SSH_VARIANT", "simple");
+      const { tempDir, repoDir, paseoHome } = createGitHubPrRemoteRepo();
+      cleanupPaths.push(tempDir);
+      const wrongRemote = path.join(tempDir, "different-repo.git");
+      execFileSync("git", ["clone", "--bare", repoDir, wrongRemote], { stdio: "pipe" });
+      git(repoDir, `--git-dir=${wrongRemote}`, "update-ref", "refs/pull/123/head", "main");
+      git(repoDir, "remote", "set-url", "origin", wrongRemote);
+      git(repoDir, "remote", "add", "parent", "ssh://git@github.com/acme/repo.git");
+      writeFileSync(
+        path.join(repoDir, ".git", "test-ssh"),
+        `#!/bin/sh
+[ "$#" = 2 ] && [ "$1" = git@github.com ] && [ "$2" = "git-upload-pack '/acme/repo.git'" ] || exit 1
+exec git upload-pack ../remote.git
+`,
+      );
+      const headSha = git(
+        repoDir,
+        `--git-dir=${path.join(tempDir, "remote.git")}`,
+        "rev-parse",
+        "refs/pull/123/head",
+      );
+      const github = createGitHubServiceStub();
+      const resolveTarget = github.getPullRequestCheckoutTarget;
+      github.getPullRequestCheckoutTarget = vi.fn(async (input) => ({
+        ...(await resolveTarget(input)),
+        headOwnerLogin: "fork-owner",
+        headRepositoryUrl: "https://github.com/fork-owner/repo",
+        headRepositorySshUrl: wrongRemote,
+        isCrossRepository: true,
+      }));
+      const request = {
+        cwd: repoDir,
+        action: "checkout" as const,
+        checkoutSource: {
+          kind: "change_request" as const,
+          forge: "github",
+          number: 123,
+          projectPath: "Acme/Repo",
+        },
+        paseoHome,
+      };
+      const resultPath = path.join(tempDir, "managed-fork-pr");
+      const deps = {
+        ...createCoreDeps({ github }),
+        worktreeManagers: {
+          hasWorktreeManager: () => true,
+          createWorktree: vi.fn(async (managerRequest: { headSha?: string }) => {
+            expect(managerRequest).toMatchObject({
+              kind: "checkout-change-request",
+              changeRequestNumber: 123,
+              checkoutRefs: [{ remoteName: "parent", remoteRef: "refs/pull/123/head" }],
+              headSha,
+              untrusted: true,
+            });
+            git(repoDir, "worktree", "add", "-b", "managed-fork-pr", resultPath, headSha);
+            return { pluginId: "test-manager", path: resultPath };
+          }),
+          removeWorktree: async () => null,
+        },
+      };
+
+      await expect(
+        createCoreWorktree(
+          { ...request, checkoutSource: { ...request.checkoutSource, projectPath: "other/repo" } },
+          deps,
+        ),
+      ).rejects.toThrow("Selected checkout has no GitHub remote for other/repo");
+      expect(github.getPullRequestCheckoutTarget).not.toHaveBeenCalled();
+      expect(deps.worktreeManagers.createWorktree).not.toHaveBeenCalled();
+
+      const result = await createCoreWorktree(request, deps);
+      expect(github.getPullRequestCheckoutTarget).toHaveBeenCalledWith({
+        cwd: repoDir,
+        number: 123,
+        repository: "acme/repo",
+      });
+      expect(result.worktree.worktreePath).toBe(resultPath);
+      expect(git(resultPath, "rev-parse", "HEAD")).toBe(headSha);
+      expect(await readPaseoWorktreeMetadata(resultPath)).toMatchObject({
+        untrustedSource: {
+          kind: "change_request",
+          forge: "github",
+          number: 123,
+          headRepository: "fork-owner/repo",
+        },
+      });
+    });
+
+    test.each([
+      "success",
+      "stale-head",
+      "stale-base",
+      "wrong-repo",
+      "non-github",
+      "multiline-url",
+    ] as const)(
+      "checks a detached review checkout against the selected GitHub PR (%s)",
+      async (scenario) => {
+        vi.stubEnv("GIT_CONFIG_GLOBAL", "/dev/null");
+        vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+        vi.stubEnv("GIT_ALLOW_PROTOCOL", "file:ssh");
+        // The Vitest setup exports GIT_SSH_COMMAND, which takes precedence over core.sshCommand.
+        vi.stubEnv("GIT_SSH_COMMAND", "sh .git/test-ssh");
+        vi.stubEnv("GIT_SSH_VARIANT", "simple");
+        const { tempDir, repoDir, paseoHome } = createGitHubPrRemoteRepo();
+        cleanupPaths.push(tempDir);
+        const remoteDir = path.join(tempDir, "remote.git");
+        const repository = "acme/repo";
+        const githubUrl = `ssh://git@github.com/${repository}.git`;
+        const otherUrl = `ssh://git@other.example/${repository}.git`;
+        const alias = `https://checkout.example/${repository}.git`;
+        const rewritesAway = scenario === "non-github" || scenario === "multiline-url";
+        const missingRepository = scenario === "wrong-repo" || rewritesAway;
+        git(repoDir, "remote", "add", "parent", rewritesAway ? githubUrl : alias);
+        git(repoDir, "config", `url.${githubUrl}.insteadOf`, alias);
+        git(repoDir, "config", `url.${otherUrl}.insteadOf`, githubUrl);
+        if (scenario === "multiline-url") {
+          git(
+            repoDir,
+            "remote",
+            "add",
+            "spoof",
+            `${otherUrl}\nparent\t${githubUrl} (fetch)\nignored`,
+          );
+        }
+        // Serve the local bare repo using Git's actual upload-pack protocol. Only the
+        // first rewrite has the expected SSH destination; a second rewrite must fail.
+        writeFileSync(
+          path.join(repoDir, ".git", "test-ssh"),
+          `#!/bin/sh
+[ "$#" = 2 ] && [ "$1" = git@github.com ] && [ "$2" = "git-upload-pack '/acme/repo.git'" ] || exit 1
+touch .git/test-ssh-called
+exec git upload-pack ../remote.git
+`,
+        );
+        expect(git(repoDir, "remote", "get-url", "parent")).toBe(
+          rewritesAway ? otherUrl : githubUrl,
+        );
+        const baseSha = git(repoDir, "rev-parse", "HEAD");
+        const headSha = git(repoDir, `--git-dir=${remoteDir}`, "rev-parse", "refs/pull/123/head");
+        // The recorded PR base can still be fetched after its branch moves.
+        git(repoDir, `--git-dir=${remoteDir}`, "update-ref", "refs/heads/main", headSha);
+        const requestedHead = scenario === "stale-head" ? baseSha : headSha;
+        const github = createGitHubServiceStub();
+        const resolveTarget = github.getPullRequestCheckoutTarget;
+        github.getPullRequestCheckoutTarget = async (input) => {
+          expect(missingRepository).toBe(false);
+          expect(input.repository).toBe(repository);
+          // For stale-head, simulate a force push between this API result and fetch.
+          return { ...(await resolveTarget(input)), headSha: requestedHead, baseSha };
+        };
+        writeFileSync(path.join(repoDir, "README.md"), "dirty local checkout\n");
+        writeFileSync(path.join(repoDir, "paseo.json"), "{}\n");
+        const hook = path.join(repoDir, ".git", "hooks", "post-checkout");
+        writeFileSync(hook, "#!/bin/sh\ntouch checkout-hook-ran\n", { mode: 0o755 });
+        const before = git(repoDir, "worktree", "list", "--porcelain");
+        const beforeCreate = vi.fn(async () => {
+          throw new Error("Review checkout must not run creation hooks");
+        });
+        const createManagedWorktree = vi.fn(async () => {
+          throw new Error("Review checkout must not run a worktree manager");
+        });
+
+        const creation = createCoreWorktree(
+          {
+            cwd: repoDir,
+            action: "review",
+            checkoutSource: {
+              kind: "change_request",
+              forge: "github",
+              number: 123,
+              projectPath: scenario === "wrong-repo" ? "other/repo" : repository,
+              expectedHeadSha: requestedHead,
+              expectedBaseSha: scenario === "stale-base" ? headSha : baseSha,
+            },
+            paseoHome,
+          },
+          {
+            ...createCoreDeps({ github }),
+            lifecycle: { before: beforeCreate },
+            worktreeManagers: {
+              hasWorktreeManager: () => true,
+              createWorktree: createManagedWorktree,
+              removeWorktree: async () => null,
+            },
+          },
+        );
+        if (scenario !== "success") {
+          await expect(creation).rejects.toThrow(
+            missingRepository ? "no GitHub remote" : "refresh the PR",
+          );
+          expect(git(repoDir, "worktree", "list", "--porcelain")).toBe(before);
+        } else {
+          const result = await creation;
+          const cwd = result.worktree.worktreePath;
+          expect(git(cwd, "rev-parse", "HEAD")).toBe(headSha);
+          expect(git(cwd, "branch", "--show-current")).toBe("");
+          expect(git(cwd, "rev-parse", "refs/worktree/paseo-review-base")).toBe(baseSha);
+          expect(readFileSync(path.join(cwd, "README.md"), "utf8")).toBe("review branch\n");
+          expect(existsSync(path.join(cwd, "checkout-hook-ran"))).toBe(false);
+          expect(existsSync(path.join(cwd, "paseo.json"))).toBe(false);
+          expect(await readPaseoWorktreeMetadata(cwd)).toMatchObject({
+            version: 2,
+            baseRef: baseSha,
+            review: { repository, number: 123, headSha, baseSha },
+          });
+          // A second registration without an untrustedSource flag still sees the
+          // review marker in the worktree's Git admin directory.
+          const workspace = createPersistedWorkspaceRecord({
+            workspaceId: "review-alias",
+            projectId: "project",
+            cwd,
+            kind: "worktree",
+            displayName: "Review alias",
+            createdAt: "2026-11-20T00:00:00Z",
+            updatedAt: "2026-11-20T00:00:00Z",
+          });
+          const registry = {
+            get: async () => workspace,
+            listAll: async () => [workspace],
+            update: async () => {
+              throw new Error("unexpected registry update");
+            },
+          };
+          await expect(
+            assertWorkspaceAutomationAllowedForWorkspace(registry, workspace.workspaceId),
+          ).rejects.toThrow("Setup and scripts are disabled");
+          await expect(
+            clearWorkspaceAutomationBlock(registry, workspace.workspaceId),
+          ).rejects.toThrow("Setup is disabled");
+        }
+        expect(beforeCreate).not.toHaveBeenCalled();
+        expect(createManagedWorktree).not.toHaveBeenCalled();
+        expect(existsSync(path.join(repoDir, ".git", "test-ssh-called"))).toBe(
+          scenario === "success" || scenario === "stale-head",
+        );
+        expect(git(repoDir, "for-each-ref", "refs/paseo/review-fetch")).toBe("");
+        expect(git(repoDir, "rev-parse", "HEAD")).toBe(baseSha);
+        expect(readFileSync(path.join(repoDir, "README.md"), "utf8")).toBe(
+          "dirty local checkout\n",
+        );
+      },
+    );
 
     test("tracks a same-repo PR branch from a single-branch clone", async () => {
       const { tempDir, repoDir, remoteDir, paseoHome } = createSameRepoGitHubPrRemoteRepo();

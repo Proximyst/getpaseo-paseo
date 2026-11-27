@@ -3261,8 +3261,45 @@ export class DaemonClient {
     );
   }
 
+  async searchGithubPullRequests(
+    input: { query: string; cursor?: string },
+    requestId?: string,
+  ): Promise<CorrelatedResponsePayload<"forge.github.search_pull_requests.response">> {
+    return this.sendNamespacedCorrelatedSessionRequest<"forge.github.search_pull_requests.response">(
+      {
+        requestId,
+        message: {
+          type: "forge.github.search_pull_requests.request",
+          query: input.query,
+          cursor: input.cursor,
+        },
+        timeout: 35_000,
+      },
+    );
+  }
+
+  async getGithubPullRequest(
+    input: { repository: string; number: number },
+    requestId?: string,
+  ): Promise<CorrelatedResponsePayload<"forge.github.get_pull_request.response">> {
+    return this.sendNamespacedCorrelatedSessionRequest<"forge.github.get_pull_request.response">({
+      requestId,
+      message: {
+        type: "forge.github.get_pull_request.request",
+        repository: input.repository,
+        number: input.number,
+      },
+      timeout: 95_000,
+    });
+  }
+
   async cloneGithubProject(
-    input: { repo: string; targetDirectory: string; cloneProtocol?: ProjectGithubCloneProtocol },
+    input: {
+      repo: string;
+      targetDirectory: string;
+      cloneProtocol?: ProjectGithubCloneProtocol;
+      reuseMatchingCheckout?: boolean;
+    },
     requestId?: string,
   ): Promise<ProjectGithubClonePayload> {
     const message = {
@@ -3270,6 +3307,9 @@ export class DaemonClient {
       repo: input.repo,
       targetDirectory: input.targetDirectory,
       ...(input.cloneProtocol ? { cloneProtocol: input.cloneProtocol } : {}),
+      ...(input.reuseMatchingCheckout !== undefined
+        ? { reuseMatchingCheckout: input.reuseMatchingCheckout }
+        : {}),
     } as const;
     return this.sendNamespacedCorrelatedSessionRequest<"project.github.clone.response">({
       requestId,
@@ -4980,11 +5020,12 @@ export class DaemonClient {
 
   async getCheckoutStatus(
     cwd: string,
-    options?: { requestId?: string },
+    options?: { requestId?: string; includeGithubRepositories?: boolean },
   ): Promise<CheckoutStatusPayload> {
     const requestId = options?.requestId;
+    const deduplicate = !requestId && !options?.includeGithubRepositories;
 
-    if (!requestId) {
+    if (deduplicate) {
       const existing = this.checkoutStatusInFlight.get(cwd);
       if (existing) {
         return existing;
@@ -4995,6 +5036,7 @@ export class DaemonClient {
     const message = SessionInboundMessageSchema.parse({
       type: "checkout_status_request",
       cwd,
+      ...(options?.includeGithubRepositories ? { includeGithubRepositories: true } : {}),
       requestId: resolvedRequestId,
     });
 
@@ -5013,7 +5055,7 @@ export class DaemonClient {
       },
     });
 
-    if (!requestId) {
+    if (deduplicate) {
       this.checkoutStatusInFlight.set(cwd, responsePromise);
       void responsePromise
         .finally(() => {

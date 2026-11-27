@@ -45,6 +45,7 @@ export interface OmpStartSessionInput {
   noSession?: boolean;
   systemPrompt?: string;
   extraArgs?: string[];
+  isolatedReview?: boolean;
 }
 
 export interface OmpPromptInput {
@@ -149,10 +150,10 @@ function appendOmpLaunchArgs(
   if (session.noSession) {
     argv.push("--no-session");
   } else if (session.session) {
-    argv.push("--session", session.session);
+    argv.push(session.isolatedReview ? "--resume" : "--session", session.session);
   }
   if (systemPrompt) {
-    argv.push("--append-system-prompt", systemPrompt);
+    argv.push(session.isolatedReview ? "--system-prompt" : "--append-system-prompt", systemPrompt);
   }
 }
 

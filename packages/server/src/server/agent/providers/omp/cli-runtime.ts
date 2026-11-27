@@ -77,7 +77,10 @@ export class OmpCliRuntime implements OmpRuntime {
       runtimeSettings: this.options.runtimeSettings,
       session: input,
     });
-    launch.env = createExternalProcessEnv(globalThis.process.env, launch.env ?? {});
+    launch.env = createExternalProcessEnv(
+      input.isolatedReview ? {} : globalThis.process.env,
+      launch.env ?? {},
+    );
     const [command, ...args] = launch.argv;
     const processLaunch: JsonlRpcLaunch = {
       command,

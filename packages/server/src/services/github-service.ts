@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { createGitHubInbox, type GitHubInboxService } from "./github-inbox.js";
 import type { ChangeRequestSource } from "./change-request-source.js";
 import {
   GITHUB_POLL_CHECK_CONTEXT_FIELDS,
@@ -503,7 +505,9 @@ const PullRequestCheckoutTargetSchema = z.object({
           number: z.number(),
           baseRefName: z.string().catch(""),
           headRefName: z.string().catch(""),
-          isCrossRepository: z.boolean().catch(false),
+          baseRefOid: z.string().nullish(),
+          headRefOid: z.string().nullish(),
+          isCrossRepository: z.boolean(),
           headRepositoryOwner: z
             .object({
               login: z.string().catch(""),
@@ -530,6 +534,8 @@ query PullRequestCheckoutTarget($owner: String!, $name: String!, $number: Int!) 
       number
       baseRefName
       headRefName
+      baseRefOid
+      headRefOid
       isCrossRepository
       headRepositoryOwner {
         login
@@ -1025,8 +1031,9 @@ export interface SearchGitHubRepositoriesOptions {
   limit?: number;
 }
 
-export interface GitHubService extends ForgeService {
+export interface GitHubService extends ForgeService, GitHubInboxService {
   changeRequests: ChangeRequestSource;
+  getCloneProtocol(cwd: string): Promise<GitHubCloneProtocol>;
   searchRepositories(options: SearchGitHubRepositoriesOptions): Promise<GitHubRepositorySummary[]>;
 }
 
@@ -1403,8 +1410,9 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     runOptions: GitHubCommandRunnerOptions,
     schema: z.ZodType<T>,
     emptyFallback: string,
+    explicitHost?: string,
   ): Promise<T> {
-    const stdout = await run(args, runOptions);
+    const stdout = await run(args, runOptions, explicitHost);
     return parseGitHubJsonOutput(stdout, schema, {
       args,
       cwd: runOptions.cwd,
@@ -2311,6 +2319,27 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
 
   api = {
     authProbeCanThrow: true,
+    ...createGitHubInbox(async (args) => {
+      try {
+        return await run(
+          ["api", "--hostname", "github.com", ...args],
+          { cwd: homedir(), envOverlay: { GH_PROMPT_DISABLED: "1", GH_DEBUG: "" } },
+          "github.com",
+        );
+      } catch (error) {
+        // gh exits nonzero for GraphQL errors; the JSON may still contain
+        // usable data, e.g. PR metadata without restricted check contexts.
+        if (
+          args[0] === "graphql" &&
+          error instanceof GitHubCommandError &&
+          error.exitCode !== null &&
+          error.stdout?.trim()
+        ) {
+          return { stdout: error.stdout, error };
+        }
+        throw error;
+      }
+    }),
 
     listPullRequests(input) {
       return cached({
@@ -2409,12 +2438,11 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
       return cached({
         cwd: input.cwd,
         method: "getPullRequestCheckoutTarget",
-        args: { number: input.number },
+        args: { number: input.number, repository: input.repository },
         readOptions: input,
         load: async () => {
-          const repo = await getGitHubRepoView({ cwd: input.cwd, run });
-          const owner = repo?.owner?.login;
-          const name = repo?.name;
+          const repo = input.repository ? null : await getGitHubRepoView({ cwd: input.cwd, run });
+          const [owner, name] = input.repository?.split("/") ?? [repo?.owner?.login, repo?.name];
           if (!owner || !name) {
             throw new Error("Unable to resolve GitHub repository for pull request checkout");
           }
@@ -2435,6 +2463,7 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
             { cwd: input.cwd },
             PullRequestCheckoutTargetSchema,
             "{}",
+            input.repository ? "github.com" : undefined,
           );
           return toPullRequestCheckoutTarget(parsed);
         },
@@ -2624,6 +2653,10 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
           };
         },
       });
+    },
+
+    getCloneProtocol(cwd) {
+      return resolveConfiguredCloneProtocol(cwd, run);
     },
 
     async searchRepositories(input) {
@@ -3846,7 +3879,7 @@ async function resolveConfiguredCloneProtocol(
       .toLowerCase();
     return protocol === "ssh" ? "ssh" : "https";
   } catch (error) {
-    if (error instanceof GitHubCommandError) {
+    if (error instanceof GitHubCommandError || error instanceof GitHubCliMissingError) {
       return "https";
     }
     throw error;
@@ -3920,6 +3953,8 @@ function toPullRequestCheckoutTarget(
     number: pullRequest.number,
     baseRefName: pullRequest.baseRefName,
     headRefName: pullRequest.headRefName,
+    ...(pullRequest.baseRefOid ? { baseSha: pullRequest.baseRefOid } : {}),
+    ...(pullRequest.headRefOid ? { headSha: pullRequest.headRefOid } : {}),
     checkoutRefs: [
       { remoteName: "origin", remoteRef: `refs/pull/${pullRequest.number}/head` },
       { remoteName: "upstream", remoteRef: `refs/pull/${pullRequest.number}/head` },

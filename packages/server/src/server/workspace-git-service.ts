@@ -361,6 +361,13 @@ export type WorkspaceGitSnapshotOptions =
       reason: string;
     };
 
+export function selectWorktreeCreationRoot(
+  checkout: { isPaseoOwnedWorktree: boolean; mainRepoRoot: string | null },
+  worktreeRoot: string,
+): string {
+  return checkout.isPaseoOwnedWorktree ? (checkout.mainRepoRoot ?? worktreeRoot) : worktreeRoot;
+}
+
 /**
  * Who is waiting for a refresh. "demand" refreshes answer a caller; "observation"
  * refreshes react to watchers, polls and fetches and run in the background Git
@@ -1059,9 +1066,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       throw new Error("Create worktree requires a git repository");
     }
 
-    return snapshot.git.isPaseoOwnedWorktree
-      ? (snapshot.git.mainRepoRoot ?? snapshot.git.repoRoot ?? resolve(cwd))
-      : (snapshot.git.repoRoot ?? resolve(cwd));
+    return selectWorktreeCreationRoot(snapshot.git, snapshot.git.repoRoot ?? resolve(cwd));
   }
 
   invalidateWorktrees(): void {

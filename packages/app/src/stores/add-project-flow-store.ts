@@ -5,20 +5,25 @@ export interface AddProjectFlowRequest {
   preferredHostId?: string;
 }
 
+interface ProjectLocationHistory {
+  lastLocation: string;
+  lastCloneParent: string | undefined;
+}
+
 interface AddProjectFlowStoreState {
   request: AddProjectFlowRequest | null;
-  /** The parent directory last used to clone or create a project, per host, for this session. */
-  lastLocationByHost: Record<string, string>;
+  /** Session history of successful clones and new folders, indexed by host. */
+  locationsByHost: Record<string, ProjectLocationHistory | undefined>;
   open: (preferredHostId?: string) => void;
   close: () => void;
-  rememberLocation: (hostId: string, location: string) => void;
+  rememberLocation: (hostId: string, location: string, kind: "clone" | "new-folder") => void;
 }
 
 let nextRequestId = 1;
 
 export const useAddProjectFlowStore = create<AddProjectFlowStoreState>((set) => ({
   request: null,
-  lastLocationByHost: {},
+  locationsByHost: {},
   open: (preferredHostId) => {
     set({
       request: {
@@ -28,6 +33,15 @@ export const useAddProjectFlowStore = create<AddProjectFlowStoreState>((set) => 
     });
   },
   close: () => set({ request: null }),
-  rememberLocation: (hostId, location) =>
-    set((state) => ({ lastLocationByHost: { ...state.lastLocationByHost, [hostId]: location } })),
+  rememberLocation: (hostId, location, kind) =>
+    set((state) => ({
+      locationsByHost: {
+        ...state.locationsByHost,
+        [hostId]: {
+          lastLocation: location,
+          lastCloneParent:
+            kind === "clone" ? location : state.locationsByHost[hostId]?.lastCloneParent,
+        },
+      },
+    })),
 }));

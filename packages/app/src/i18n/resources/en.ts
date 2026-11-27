@@ -1322,6 +1322,28 @@ export const en = {
       sessions: "History",
       search: "Search",
       schedules: "Schedules",
+      githubPullRequests: "GitHub PRs",
+    },
+    pullRequestInbox: {
+      checkout: "Check out PR",
+      mine: "My own",
+      reviewRequested: "Review requested",
+      open: "Open PR",
+      reference: "GitHub PR URL or reference",
+      invalidReference: "Enter a GitHub pull request URL or a reference like owner/repo#123.",
+      updateHostToOpen: "Update Paseo on this host to open PRs by URL or reference.",
+      searchQuery: "GitHub search query",
+      options: "Pull request inbox options",
+      projectsOnly: "Projects only",
+      cloneDirectory: "Default clone directory",
+      cloneDirectoryHint:
+        "Set a directory on this host to clone missing projects into owner/repo subfolders. Leave it blank to turn off automatic cloning.",
+      preferencesError: "Could not load inbox preferences.",
+      matchingProjects: "Matching pull requests to projects…",
+      projectMatchError: "Could not match pull requests to projects: {{message}}",
+      noProjectPullRequests: "No pull requests from your projects match this view.",
+      noProjectPullRequestsOnLoadedPages:
+        "No pull requests from your projects on the loaded pages.",
     },
     worktreeSetup: {
       title: "Set up worktree scripts",

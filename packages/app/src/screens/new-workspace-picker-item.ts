@@ -28,8 +28,8 @@ export type PickerItem =
 
 export type PickerCheckoutRequest = Pick<
   CreatePaseoWorktreeInput,
-  "action" | "refName" | "checkoutSource" | "githubPrNumber"
->;
+  "refName" | "checkoutSource" | "githubPrNumber"
+> & { action?: RefAction };
 
 /** What a new worktree does with the picked ref: start a new branch from it, or work on it. */
 export type RefAction = "branch-off" | "checkout";

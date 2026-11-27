@@ -35,7 +35,8 @@ import equal from "fast-deep-equal";
 import { WorkspaceSetupObservation } from "./workspace-setup-observation.js";
 import { SessionDelivery, type OwnedSubscription } from "./session/owned-subscriptions/index.js";
 import { v4 as uuidv4 } from "uuid";
-import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { lstat, mkdir, realpath, stat } from "node:fs/promises";
 import { basename, join, resolve, sep } from "path";
 import { homedir } from "node:os";
 import { CLIENT_CAPS, type ClientCapability } from "@getpaseo/protocol/client-capabilities";
@@ -321,11 +322,12 @@ function resolveWorkspaceArchiveOperations(
   return operations ?? new WorkspaceArchiveOperations();
 }
 import { WorktreeRequestError, toWorktreeWireError } from "./worktree-errors.js";
-import { parseGitRemoteLocation } from "@getpaseo/protocol/git-remote";
+import { parseGitHubRemoteUrl, parseGitRemoteLocation } from "@getpaseo/protocol/git-remote";
 import {
   createProjectDirectory,
   ProjectDirectoryRequestError,
 } from "./project-directory-service.js";
+import { listGitHubFetchRemotes } from "../utils/git-fetch-remotes.js";
 import { runGitCommand } from "../utils/run-git-command.js";
 import { CreateAgentLifecycleDispatch } from "./agent/create-agent-lifecycle-dispatch.js";
 import { resolveWorktreeSourceCwd } from "./workspace-source.js";
@@ -2501,7 +2503,11 @@ export class Session {
             payload: {
               requestId,
               requestType: msg.type,
-              error: `Session is not authorized for ${msg.type}`,
+              error:
+                msg.type === "forge.github.search_pull_requests.request" ||
+                msg.type === "forge.github.get_pull_request.request"
+                  ? "This session is not authorized to read pull requests as the host's GitHub account."
+                  : `Session is not authorized for ${msg.type}`,
               code: msg.type.startsWith("hosts.") ? "permission_denied" : "access_denied",
             },
           });
@@ -2790,7 +2796,8 @@ export class Session {
       this.dispatchWorkspaceLabelMessage(msg) ??
       this.dispatchWorkspaceSetupMessage(msg) ??
       this.dispatchMetadataMessage(msg) ??
-      this.dispatchWorkspaceAndProjectMessage(msg)
+      this.dispatchWorkspaceAndProjectMessage(msg) ??
+      this.dispatchGithubInboxMessage(msg)
     );
   }
 
@@ -3538,6 +3545,17 @@ export class Session {
         return this.handleWorkspacePinSetRequest(msg.workspaceId, msg.pinned, msg.requestId);
       case "workspace.base_branch.set.request":
         return this.handleWorkspaceBaseBranchSetRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchGithubInboxMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "forge.github.search_pull_requests.request":
+        return this.handleGithubInboxSearchRequest(msg);
+      case "forge.github.get_pull_request.request":
+        return this.handleGithubInboxDetailRequest(msg);
       default:
         return undefined;
     }
@@ -5093,7 +5111,7 @@ export class Session {
       await this.agentUpdates.forwardLiveAgent(
         this.agentManager.getAgent(snapshot.id) ?? liveSnapshot,
       );
-      if (resolvedIntent.createdDirectoryWorkspace && trimmedPrompt) {
+      if (resolvedIntent.createdDirectoryWorkspace && trimmedPrompt && !config.launchProfile) {
         this.workspaceAutoName.scheduleForDirectory(
           {
             workspaceId: resolvedIntent.intent.workspaceId,
@@ -7965,51 +7983,96 @@ export class Session {
     }
   }
 
+  private async handleGithubInboxSearchRequest(
+    request: Extract<SessionInboundMessage, { type: "forge.github.search_pull_requests.request" }>,
+  ): Promise<void> {
+    const { requestId, query, cursor } = request;
+    try {
+      const search = (this.github as Partial<GitHubService>).searchInboxPullRequests;
+      if (!search) throw new Error("GitHub pull request inbox is unavailable on this host.");
+      const result = await search.call(this.github, { query, cursor });
+      this.emit({
+        type: "forge.github.search_pull_requests.response",
+        payload: { ...result, error: null, requestId },
+      });
+    } catch (error) {
+      this.emit({
+        type: "forge.github.search_pull_requests.response",
+        payload: { items: [], nextCursor: null, error: githubInboxErrorMessage(error), requestId },
+      });
+    }
+  }
+
+  private async handleGithubInboxDetailRequest(
+    request: Extract<SessionInboundMessage, { type: "forge.github.get_pull_request.request" }>,
+  ): Promise<void> {
+    const { requestId, repository, number } = request;
+    try {
+      const get = (this.github as Partial<GitHubService>).getInboxPullRequest;
+      if (!get) throw new Error("GitHub pull request inbox is unavailable on this host.");
+      const result = await get.call(this.github, { repository, number });
+      this.emit({
+        type: "forge.github.get_pull_request.response",
+        payload: { ...result, error: null, requestId },
+      });
+    } catch (error) {
+      this.emit({
+        type: "forge.github.get_pull_request.response",
+        payload: {
+          headSha: null,
+          baseSha: null,
+          activity: [],
+          files: [],
+          checks: [],
+          complete: false,
+          error: githubInboxErrorMessage(error),
+          requestId,
+        },
+      });
+    }
+  }
+
   private async handleProjectGithubCloneRequest(
     request: Extract<SessionInboundMessage, { type: "project.github.clone.request" }>,
   ): Promise<void> {
     let normalizedRepo = request.repo;
     let checkoutPath: string | null = null;
     try {
+      const useConfiguredProtocol =
+        request.reuseMatchingCheckout &&
+        !request.cloneProtocol &&
+        !parseGitRemoteLocation(request.repo);
       const repo = normalizeCloneRepository({
         repo: request.repo,
-        cloneProtocol: request.cloneProtocol,
+        cloneProtocol: useConfiguredProtocol ? "https" : request.cloneProtocol,
       });
+      const githubRepository = request.reuseMatchingCheckout
+        ? parseGitHubRemoteUrl(repo.cloneUrl)?.repo.toLowerCase()
+        : undefined;
+      if (request.reuseMatchingCheckout && !githubRepository) {
+        throw new Error("Checkout reuse requires a GitHub repository");
+      }
       normalizedRepo = repo.displayName;
       const targetParent = resolve(expandTilde(request.targetDirectory.trim()));
       checkoutPath = resolve(targetParent, repo.name);
-      if (!this.isPathWithinRoot(targetParent, checkoutPath)) {
+      if (checkoutPath === targetParent || !this.isPathWithinRoot(targetParent, checkoutPath)) {
         throw new Error("Resolved checkout path must stay inside the target directory");
       }
 
-      await mkdir(targetParent, { recursive: true });
-      try {
-        await lstat(checkoutPath);
-        throw new Error(`Checkout path already exists: ${checkoutPath}`);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          throw error;
-        }
-      }
-
-      const cloneStagingPath = await mkdtemp(resolve(targetParent, ".paseo-clone-"));
-      try {
-        await runGitCommand(["clone", repo.cloneUrl, cloneStagingPath], {
-          cwd: targetParent,
-          timeout: 5 * 60 * 1000,
-          maxOutputBytes: 1024 * 1024,
-          logger: this.sessionLogger,
-        });
-        await rename(cloneStagingPath, checkoutPath);
-      } catch (error) {
-        await rm(cloneStagingPath, { recursive: true, force: true }).catch((cleanupError) => {
-          this.sessionLogger.warn(
-            { err: cleanupError, cloneStagingPath },
-            "Failed to clean up partial GitHub clone",
-          );
-        });
-        throw error;
-      }
+      await ensureGithubCloneCheckout({
+        targetParent,
+        checkoutPath,
+        githubRepository,
+        logger: this.sessionLogger,
+        getCloneUrl: async () => {
+          if (!useConfiguredProtocol) return repo.cloneUrl;
+          const getCloneProtocol = (this.github as Partial<GitHubService>).getCloneProtocol;
+          if ((await getCloneProtocol?.call(this.github, targetParent)) !== "ssh") {
+            return repo.cloneUrl;
+          }
+          return normalizeCloneRepository({ repo: request.repo, cloneProtocol: "ssh" }).cloneUrl;
+        },
+      });
 
       const project =
         await this.workspaceProvisioning.findOrCreateProjectForDirectory(checkoutPath);
@@ -9688,10 +9751,81 @@ export class Session {
   }
 }
 
+const activeGithubCloneDestinations = new Set<string>();
+
+async function ensureGithubCloneCheckout(input: {
+  targetParent: string;
+  checkoutPath: string;
+  githubRepository: string | undefined;
+  getCloneUrl: () => Promise<string>;
+  logger: pino.Logger;
+}): Promise<void> {
+  const { targetParent, checkoutPath, githubRepository, getCloneUrl, logger } = input;
+  await mkdir(targetParent, { recursive: true });
+  const parent = await realpath(targetParent);
+  const destination = join(parent, basename(checkoutPath));
+  const conflict = () => new Error(`Checkout path already exists: ${checkoutPath}`);
+  // Serialize checkouts targeting the same destination in this daemon.
+  if (activeGithubCloneDestinations.has(destination)) throw conflict();
+  activeGithubCloneDestinations.add(destination);
+  try {
+    try {
+      await lstat(destination);
+      if (githubRepository && (await isMatchingGithubCheckout(destination, githubRepository))) {
+        return;
+      }
+      throw conflict();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+
+    await runGitCommand(["clone", "--", await getCloneUrl(), destination], {
+      cwd: parent,
+      timeout: 5 * 60 * 1000,
+      maxOutputBytes: 1024 * 1024,
+      logger,
+    });
+  } finally {
+    activeGithubCloneDestinations.delete(destination);
+  }
+}
+
+async function isMatchingGithubCheckout(path: string, repository: string): Promise<boolean> {
+  try {
+    const before = await lstat(path);
+    if (!before.isDirectory()) return false; // Includes symlinks, even to a matching checkout.
+    const root = await runGitCommand(["rev-parse", "--show-toplevel"], { cwd: path });
+    const rootPath = root.stdout.replace(/\r?\n$/, "");
+    if (root.truncated || !isAbsolute(rootPath) || resolve(rootPath) !== path) return false;
+    await runGitCommand(["rev-parse", "--verify", "HEAD^{commit}"], { cwd: path });
+    const remotes = await listGitHubFetchRemotes(path);
+    return (
+      remotes.some((remote) => remote.repository === repository) &&
+      isSameCheckoutDirectory(before, await lstat(path))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isSameCheckoutDirectory(previous: Stats, current: Stats): boolean {
+  return current.isDirectory() && current.dev === previous.dev && current.ino === previous.ino;
+}
+
 interface CloneRepositoryInput {
   name: string;
   displayName: string;
   cloneUrl: string;
+}
+
+function githubInboxErrorMessage(error: unknown): string {
+  if (error instanceof GitHubAuthenticationError) {
+    return "GitHub CLI is not authenticated on the host. Run gh auth login --hostname github.com there.";
+  }
+  const fallback = "GitHub pull request inbox request failed.";
+  if (!(error instanceof Error)) return fallback;
+  const message = error instanceof GitHubCommandError ? error.stderr : error.message;
+  return message.trim().slice(0, 500) || fallback;
 }
 
 function normalizeCloneRepository(input: {

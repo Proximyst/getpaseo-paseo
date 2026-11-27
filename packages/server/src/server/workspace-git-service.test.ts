@@ -787,6 +787,27 @@ describe("WorkspaceGitServiceImpl", () => {
     );
   });
 
+  test("resolveRepoRoot uses the main checkout for a Paseo-owned worktree", async () => {
+    const worktreeRoot = "/tmp/linked-worktree";
+    const mainRepoRoot = "/tmp/main-repo";
+    const service = createService({
+      getCheckoutStatus: vi.fn(async () =>
+        createCheckoutStatus(worktreeRoot, { isPaseoOwnedWorktree: true, mainRepoRoot }),
+      ),
+      getCheckoutSnapshotFacts: vi.fn(async () => ({
+        ...createCheckoutSnapshotFacts(worktreeRoot),
+        isPaseoOwnedWorktree: true,
+        mainRepoRoot,
+      })),
+    });
+
+    try {
+      await expect(service.resolveRepoRoot(worktreeRoot)).resolves.toBe(mainRepoRoot);
+    } finally {
+      service.dispose();
+    }
+  });
+
   test("non-forced workspace refresh does not reload GitHub or emit when state is unchanged", async () => {
     let nowMs = Date.parse("2026-04-12T00:00:00.000Z");
     const getPullRequestStatus = vi.fn(async () => createPullRequestStatusResult());

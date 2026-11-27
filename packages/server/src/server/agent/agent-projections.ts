@@ -438,6 +438,9 @@ export function toRecentProviderSessionDescriptorPayload(
 
 function buildSerializableConfig(config: AgentSessionConfig): SerializableAgentConfig | null {
   const serializable: SerializableAgentConfig = {};
+  if (config.launchProfile !== undefined) serializable.launchProfile = config.launchProfile;
+  if (config.reviewHeadSha !== undefined) serializable.reviewHeadSha = config.reviewHeadSha;
+  if (config.reviewBaseSha !== undefined) serializable.reviewBaseSha = config.reviewBaseSha;
   if (config.modeId) {
     serializable.modeId = config.modeId;
   }

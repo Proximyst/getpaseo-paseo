@@ -15,6 +15,7 @@ import {
   type AddProjectFlowState,
   type GithubRepositoryChoice,
 } from "./model";
+import { rememberCloneParent } from "./options";
 
 /** A failure found before any work starts, shown the same way as one the host reports. */
 function rejectSubmission(state: AddProjectFlowState, message: string): AddProjectFlowState {
@@ -139,13 +140,13 @@ export function useAddProjectActions(input: {
             repository.cloneProtocol,
           );
           if (!result.ok) return { ok: false, error: result.error ?? "Unable to clone project" };
-          rememberLocation(hostId, location);
+          rememberCloneParent(hostId, location);
           return { ok: true, project: result.project };
         },
         "Unable to clone project",
       );
     },
-    [cloneGithubProject, hostId, rememberLocation, run],
+    [cloneGithubProject, hostId, run],
   );
 
   const createFolder = useCallback(
@@ -169,7 +170,7 @@ export function useAddProjectActions(input: {
               getHostRuntimeStore().acceptProjectSnapshot(serverId, project),
             setHasHydratedWorkspaces,
           });
-          rememberLocation(hostId, location);
+          rememberLocation(hostId, location, "new-folder");
           return { ok: true, project: payload.project };
         },
         "Unable to create folder",

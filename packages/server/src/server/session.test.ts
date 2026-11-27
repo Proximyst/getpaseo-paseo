@@ -7,11 +7,12 @@ import {
   createMessageReceiptsStub,
   createTestCreationService,
 } from "./test-utils/session-stubs.js";
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -974,6 +975,49 @@ describe("session authorization permissions", () => {
     ]);
   });
 
+  test("requires host account access even when a session may read workspaces", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const searchInboxPullRequests = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
+    const session = createSessionForTest({
+      permissions: ["workspace.read"],
+      messages,
+      github: { searchInboxPullRequests },
+    });
+    await session.handleMessage({
+      type: "forge.github.search_pull_requests.request",
+      query: "author:@me",
+      requestId: "no-account-access",
+    });
+    expect(searchInboxPullRequests).not.toHaveBeenCalled();
+    expect(messages).toEqual([
+      {
+        type: "rpc_error",
+        payload: {
+          requestId: "no-account-access",
+          requestType: "forge.github.search_pull_requests.request",
+          error:
+            "This session is not authorized to read pull requests as the host's GitHub account.",
+          code: "access_denied",
+        },
+      },
+    ]);
+
+    session.setPermissions(["access.manage"]);
+    await session.handleMessage({
+      type: "forge.github.search_pull_requests.request",
+      query: "author:@me",
+      requestId: "with-account-access",
+    });
+    expect(searchInboxPullRequests).toHaveBeenCalledWith({
+      query: "author:@me",
+      cursor: undefined,
+    });
+    expect(messages.at(-1)).toEqual({
+      type: "forge.github.search_pull_requests.response",
+      payload: { items: [], nextCursor: null, error: null, requestId: "with-account-access" },
+    });
+  });
+
   test("replaces a session's permissions without reconstructing the session", async () => {
     const messages: SessionOutboundMessage[] = [];
     const session = createSessionForTest({ permissions: ["hub.execute"], messages });
@@ -1243,6 +1287,201 @@ describe("project command-center RPCs", () => {
     } finally {
       rmSync(parentDirectory, { recursive: true, force: true });
     }
+  });
+});
+
+describe("GitHub project clone", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    gitCommandMocks.runGitCommand.mockReset();
+    for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function fixture(github?: SessionForTestOptions["github"]) {
+    const targetDirectory = realpathSync(mkdtempSync(join(tmpdir(), "paseo-github-clone-")));
+    tempDirs.push(targetDirectory);
+    const checkoutPath = join(targetDirectory, "repo");
+    const messages: SessionOutboundMessage[] = [];
+    const register = vi.fn(async (input: { timestamp: string }) =>
+      createPersistedProjectRecord({
+        projectId: "prj_github_clone",
+        rootPath: checkoutPath,
+        kind: "git",
+        displayName: "repo",
+        createdAt: input.timestamp,
+        updatedAt: input.timestamp,
+      }),
+    );
+    const session = createSessionForTest({
+      github,
+      messages,
+      projectRegistry: { getOrCreateActiveByRoot: register },
+      workspaceGitService: {
+        getCheckout: vi.fn(async () => ({
+          cwd: checkoutPath,
+          isGit: true,
+          currentBranch: "main",
+          remoteUrl: "https://github.com/owner/repo.git",
+          worktreeRoot: checkoutPath,
+          isPaseoOwnedWorktree: false,
+          mainRepoRoot: checkoutPath,
+        })),
+      },
+    });
+    const clone = async (reuseMatchingCheckout?: boolean, cloneProtocol?: "https") => {
+      await session.handleMessage({
+        type: "project.github.clone.request",
+        requestId: "clone",
+        repo: "owner/repo",
+        targetDirectory,
+        cloneProtocol,
+        reuseMatchingCheckout,
+      });
+      const response = messages.at(-1);
+      return response?.type === "project.github.clone.response" ? response.payload : undefined;
+    };
+    return { targetDirectory, checkoutPath, clone, register };
+  }
+
+  function git(cwd: string, ...args: string[]): string {
+    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  }
+
+  function commitFixture(cwd: string) {
+    git(
+      cwd,
+      "-c",
+      "user.name=Paseo",
+      "-c",
+      "user.email=paseo@example.test",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "init",
+    );
+  }
+
+  function runLocalGitForReuse() {
+    gitCommandMocks.runGitCommand.mockImplementation(
+      async (args: string[], { cwd }: { cwd: string }) => {
+        if (args[0] === "clone") throw new Error("Reuse must not run git clone");
+        return { stdout: git(cwd, ...args), truncated: false };
+      },
+    );
+  }
+
+  test("registers a matching exact worktree using its effective GitHub fetch URL, only when opted in", async () => {
+    const { clone, checkoutPath, register } = fixture();
+    mkdirSync(checkoutPath);
+    git(checkoutPath, "init", "--quiet");
+    commitFixture(checkoutPath);
+    git(checkoutPath, "remote", "add", "upstream", "https://paseo.invalid/OWNER/Repo.git");
+    git(checkoutPath, "config", "url.git@github.com:.insteadOf", "https://paseo.invalid/");
+    git(checkoutPath, "remote", "set-url", "--push", "upstream", "https://github.com/owner/fork");
+    runLocalGitForReuse();
+
+    expect(await clone(undefined, "https")).toMatchObject({
+      checkoutPath,
+      error: `Checkout path already exists: ${checkoutPath}`,
+      project: null,
+    });
+    expect(gitCommandMocks.runGitCommand).not.toHaveBeenCalled();
+    expect(register).not.toHaveBeenCalled();
+
+    expect(await clone(true)).toMatchObject({
+      checkoutPath,
+      error: null,
+      project: { projectId: "prj_github_clone", projectRootPath: checkoutPath },
+    });
+    expect(register).toHaveBeenCalledOnce();
+  });
+
+  test.each(["wrong fetch remote", "unborn checkout", "subdirectory", "symlink"])(
+    "rejects a %s at the target without registering or modifying it",
+    async (conflict) => {
+      const { clone, checkoutPath, register, targetDirectory } = fixture();
+      let worktree = checkoutPath;
+      if (conflict === "subdirectory") {
+        worktree = targetDirectory;
+      } else if (conflict === "symlink") {
+        worktree = join(targetDirectory, "elsewhere");
+      }
+      mkdirSync(worktree, { recursive: true });
+      git(worktree, "init", "--quiet");
+      git(worktree, "remote", "add", "origin", "https://github.com/owner/repo.git");
+      if (conflict !== "unborn checkout") commitFixture(worktree);
+      if (conflict === "wrong fetch remote") {
+        git(
+          worktree,
+          "config",
+          "url.https://github.com/owner/fork.git.insteadOf",
+          "https://github.com/owner/repo.git",
+        );
+        git(worktree, "remote", "set-url", "--push", "origin", "git@github.com:owner/repo.git");
+      } else if (conflict === "subdirectory") {
+        mkdirSync(checkoutPath);
+      } else if (conflict === "symlink") {
+        symlinkSync(worktree, checkoutPath, "junction");
+      }
+      const marker = join(checkoutPath, "keep");
+      writeFileSync(marker, "external");
+      runLocalGitForReuse();
+
+      expect(await clone(true)).toMatchObject({
+        checkoutPath,
+        error: `Checkout path already exists: ${checkoutPath}`,
+        project: null,
+      });
+      expect(register).not.toHaveBeenCalled();
+      expect(readFileSync(marker, "utf8")).toBe("external");
+    },
+  );
+
+  test("leaves no public checkout when Git fails", async () => {
+    const { clone, checkoutPath, register } = fixture();
+    gitCommandMocks.runGitCommand.mockRejectedValueOnce(new Error("Clone failed"));
+
+    expect(await clone(undefined, "https")).toMatchObject({
+      checkoutPath,
+      error: "Clone failed",
+      project: null,
+    });
+    expect(existsSync(checkoutPath)).toBe(false);
+    expect(register).not.toHaveBeenCalled();
+  });
+
+  test("clones directly into the destination and registers it", async () => {
+    const { clone, checkoutPath, targetDirectory, register } = fixture();
+    const remote = join(targetDirectory, "fixture.git");
+    git(targetDirectory, "init", "--bare", remote);
+    gitCommandMocks.runGitCommand.mockImplementationOnce(
+      async (args: string[], { cwd }: { cwd: string }) => {
+        expect(args).toEqual(["clone", "--", "https://github.com/owner/repo.git", checkoutPath]);
+        return {
+          stdout: git(
+            cwd,
+            "-c",
+            `url.${remote}.insteadOf=https://github.com/owner/repo.git`,
+            ...args,
+          ),
+          truncated: false,
+        };
+      },
+    );
+
+    expect(await clone(true, "https")).toMatchObject({
+      checkoutPath,
+      error: null,
+      project: { projectRootPath: checkoutPath },
+    });
+    expect(git(checkoutPath, "rev-parse", "--show-toplevel").trim()).toBe(checkoutPath);
+    expect(git(checkoutPath, "remote", "get-url", "origin").trim()).toBe(
+      "https://github.com/owner/repo.git",
+    );
+    expect(register).toHaveBeenCalledOnce();
   });
 });
 

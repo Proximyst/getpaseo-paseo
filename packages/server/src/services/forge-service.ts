@@ -35,6 +35,8 @@ export interface PullRequestCheckoutTarget {
   number: number;
   baseRefName: string;
   headRefName: string;
+  baseSha?: string;
+  headSha?: string;
   checkoutRefs?: PullRequestCheckoutRef[];
   headOwnerLogin: string | null;
   headRepositorySshUrl: string | null;
@@ -254,6 +256,8 @@ export type ListIssuesOptions = {
 export type GetPullRequestOptions = {
   cwd: string;
   number: number;
+  /** Explicit owner/name for GitHub checkout target resolution. */
+  repository?: string;
 } & ForgeReadOptions;
 
 export type GetPullRequestTimelineOptions = {

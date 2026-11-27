@@ -644,6 +644,9 @@ export interface ImportedProviderSession {
 export interface AgentSessionConfig {
   provider: AgentProvider;
   cwd: string;
+  launchProfile?: "pull-request-review";
+  reviewHeadSha?: string;
+  reviewBaseSha?: string;
   /**
    * Provider-agnostic system/developer instruction string.
    * Mapped by each provider to its native instruction field.

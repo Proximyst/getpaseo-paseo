@@ -20,6 +20,9 @@ import { foldFeatureValues } from "./option-controls.js";
 
 const SERIALIZABLE_CONFIG_SCHEMA = z
   .object({
+    launchProfile: z.literal("pull-request-review").optional(),
+    reviewHeadSha: z.string().optional(),
+    reviewBaseSha: z.string().optional(),
     modeId: z.string().nullable().optional(),
     model: z.string().nullable().optional(),
     thinkingOptionId: z.string().nullable().optional(),
@@ -95,6 +98,9 @@ const RAW_STORED_AGENT_SCHEMA = z.object({
 
 export type SerializableAgentConfig = Pick<
   AgentSessionConfig,
+  | "launchProfile"
+  | "reviewHeadSha"
+  | "reviewBaseSha"
   | "modeId"
   | "model"
   | "thinkingOptionId"

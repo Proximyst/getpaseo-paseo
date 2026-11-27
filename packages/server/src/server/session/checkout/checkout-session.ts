@@ -54,6 +54,7 @@ import {
   listCheckoutCommits,
 } from "../../../utils/checkout-git.js";
 import { runGitCommand } from "../../../utils/run-git-command.js";
+import { listGitHubFetchRemotes } from "../../../utils/git-fetch-remotes.js";
 import { expandTilde } from "../../../utils/path.js";
 import { listGitWorktrees } from "../../../utils/worktree.js";
 import type { GitMetadataGenerator } from "./git-metadata-generator.js";
@@ -241,13 +242,17 @@ export class CheckoutSession {
 
     try {
       const snapshot = await this.workspaceGitService.getSnapshot(resolvedCwd);
+      let githubRepositories: string[] | undefined;
+      if (msg.includeGithubRepositories && snapshot.git.isGit) {
+        const remotes = await listGitHubFetchRemotes(resolvedCwd);
+        githubRepositories = [...new Set(remotes.map(({ repository }) => repository))];
+      }
       this.host.emit({
         type: "checkout_status_response",
-        payload: buildCheckoutStatusPayloadFromSnapshot({
-          cwd,
-          requestId,
-          snapshot,
-        }),
+        payload: {
+          ...buildCheckoutStatusPayloadFromSnapshot({ cwd, requestId, snapshot }),
+          ...(githubRepositories ? { githubRepositories } : {}),
+        },
       });
     } catch (error) {
       this.host.emit({

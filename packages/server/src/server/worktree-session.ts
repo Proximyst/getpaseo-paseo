@@ -43,6 +43,7 @@ import {
 } from "./worktree/commands.js";
 import type { WorkspaceSetupOperation } from "./workspace-setup-runtime.js";
 import {
+  assertWorkspaceAutomationAllowed,
   formatWorkspaceAutomationBlockedMessage,
   WorkspaceAutomationBlockedError,
 } from "./workspace-automation-gate.js";
@@ -364,6 +365,9 @@ export async function createPaseoWorktreeWorkflow(
   const workspace = createdWorktree.workspace;
 
   try {
+    if (workspace.untrustedSource?.review) {
+      assertWorkspaceAutomationAllowed(workspace.untrustedSource);
+    }
     await dependencies.assertWorkspaceAutomationAllowed?.(workspace.workspaceId);
   } catch (error) {
     if (!(error instanceof WorkspaceAutomationBlockedError)) throw error;

@@ -257,6 +257,17 @@ interface PreparedSessionConfig {
   paseoToolPolicy: ProviderPaseoToolsPolicy | undefined;
 }
 
+interface AgentLaunchOpening {
+  reason: PluginSessionOpenRequest["reason"];
+  purpose: PluginSessionOpenRequest["purpose"];
+  launchProfile?: AgentSessionConfig["launchProfile"];
+  workspaceId?: string | null;
+  title?: string | null;
+  background?: boolean;
+  labels?: Record<string, string>;
+  metadata?: AgentMetadata;
+}
+
 interface NormalizeConfigOptions {
   resolveDefaultModel?: boolean;
   env?: Record<string, string>;
@@ -286,6 +297,9 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
   if (!record.config) {
     return config;
   }
+  config.launchProfile = record.config.launchProfile;
+  config.reviewHeadSha = record.config.reviewHeadSha;
+  config.reviewBaseSha = record.config.reviewBaseSha;
   if (record.config.model != null) config.model = record.config.model;
   if (record.config.thinkingOptionId != null) {
     config.thinkingOptionId = record.config.thinkingOptionId;
@@ -299,6 +313,38 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
   }
   if (record.config.mcpServers != null) config.mcpServers = record.config.mcpServers;
   return stripInternalPaseoMcpServer(config);
+}
+
+function pinnedReviewLaunchConfig(
+  config:
+    | Pick<AgentSessionConfig, "launchProfile" | "reviewHeadSha" | "reviewBaseSha">
+    | null
+    | undefined,
+  cwd: string | undefined,
+): Partial<AgentSessionConfig> | undefined {
+  if (!config?.launchProfile) return undefined;
+  return {
+    launchProfile: config.launchProfile,
+    reviewHeadSha: config.reviewHeadSha,
+    reviewBaseSha: config.reviewBaseSha,
+    cwd,
+  };
+}
+
+function normalizeReviewLaunchProfile(config: AgentSessionConfig): void {
+  if (config.launchProfile === undefined) {
+    if (config.reviewHeadSha !== undefined || config.reviewBaseSha !== undefined) {
+      throw new Error("Review commits require the pull-request-review launch profile");
+    }
+    return;
+  }
+  if (config.launchProfile !== "pull-request-review" || config.provider !== "omp") {
+    throw new Error("Pull request review requires the built-in OMP provider");
+  }
+  if (config.internal || config.toolPolicy || Object.keys(config.mcpServers ?? {}).length > 0) {
+    throw new Error("Pull request review does not allow custom tools or internal agent mode");
+  }
+  config.modeId = "findings-only";
 }
 
 export { AGENT_LIFECYCLE_STATUSES, type AgentLifecycleStatus };
@@ -1720,7 +1766,7 @@ export class AgentManager {
   ): Promise<ManagedAgent> {
     this.assertAcceptingAgentRegistrations();
     config = this.withConvertedOptions(config);
-    if (this.pluginLifecycle && !config.internal) {
+    if (this.pluginLifecycle && !config.internal && !config.launchProfile) {
       const sent = exposeFeatureValuesToHook(config);
       const request = await this.pluginLifecycle.before("agent.create.before", {
         config: sent,
@@ -1759,6 +1805,7 @@ export class AgentManager {
       options?.env,
       {
         reason: "create",
+        launchProfile: storedConfig.launchProfile,
         purpose: "interactive",
         workspaceId: options.workspaceId ?? null,
         title: options.initialTitle ?? storedConfig.title ?? null,
@@ -1870,16 +1917,17 @@ export class AgentManager {
       "resumeAgentFromPersistence",
     );
     const metadata = (handle.metadata ?? {}) as Partial<AgentSessionConfig>;
-    const mergedConfig = {
-      ...metadata,
-      ...overrides,
-      provider: handle.provider,
-    } as AgentSessionConfig;
     // Decide residency from durable state inside the lifecycle lane. A loader may
     // have read the record before a queued archive or restore completed. Residency is
     // settled before the config is prepared, because a history load reads an archived
     // agent whose working directory may be gone.
     const record = this.registry ? await this.registry.get(resolvedAgentId) : null;
+    const mergedConfig = {
+      ...metadata,
+      ...overrides,
+      ...pinnedReviewLaunchConfig(record?.config, record?.cwd),
+      provider: handle.provider,
+    } as AgentSessionConfig;
     const purpose = await resolveResumePurpose(record, resumeOptions?.purpose, mergedConfig.cwd);
     const currentResumeOptions = { purpose } satisfies AgentResumeSessionOptions;
 
@@ -1906,6 +1954,7 @@ export class AgentManager {
       launchEnv,
       {
         reason: "resume",
+        launchProfile: storedConfig.launchProfile,
         purpose,
         workspaceId,
         title: record?.title ?? mergedConfig.title ?? null,
@@ -2110,6 +2159,7 @@ export class AgentManager {
     const refreshConfig = {
       ...existing.config,
       ...overrides,
+      ...pinnedReviewLaunchConfig(existing.config, existing.config.cwd),
       provider,
     } as AgentSessionConfig;
     const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
@@ -2127,6 +2177,7 @@ export class AgentManager {
       existing.launchEnv,
       {
         reason: "refresh",
+        launchProfile: storedConfig.launchProfile,
         purpose: "interactive",
         workspaceId: existing.workspaceId,
         title: await this.resolveInitialPersistedTitle(agentId, existing.config, null),
@@ -6488,6 +6539,7 @@ export class AgentManager {
     options: NormalizeConfigOptions = {},
   ): Promise<AgentSessionConfig> {
     const normalized: AgentSessionConfig = { ...this.withConvertedOptions(config) };
+    normalizeReviewLaunchProfile(normalized);
 
     // Always resolve cwd to absolute path for consistent history file lookup
     if (normalized.cwd) {
@@ -6506,7 +6558,7 @@ export class AgentManager {
     }
 
     const shouldResolveDefaultModel = options.resolveDefaultModel ?? true;
-    if (shouldResolveDefaultModel && !normalized.model) {
+    if (shouldResolveDefaultModel && !normalized.model && !normalized.launchProfile) {
       const defaultModelId = await this.resolveDefaultModelId(normalized);
       if (defaultModelId) {
         normalized.model = defaultModelId;
@@ -6601,6 +6653,9 @@ export class AgentManager {
       purpose: options.purpose,
       resolveDefaultModel: options.resolveDefaultModel,
     });
+    if (storedConfig.launchProfile) {
+      return { storedConfig, launchConfig: storedConfig, paseoToolPolicy: { enabled: false } };
+    }
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
@@ -6636,17 +6691,10 @@ export class AgentManager {
     client: AgentClient,
     cwd: string,
     paseoToolPolicy: ProviderPaseoToolsPolicy | undefined,
-    env?: Record<string, string>,
-    opening?: {
-      reason: PluginSessionOpenRequest["reason"];
-      purpose: PluginSessionOpenRequest["purpose"];
-      workspaceId?: string | null;
-      title?: string | null;
-      background?: boolean;
-      labels?: Record<string, string>;
-      metadata?: AgentMetadata;
-    },
+    env: Record<string, string> | undefined,
+    opening: AgentLaunchOpening,
   ): Promise<AgentLaunchContext> {
+    if (opening.launchProfile) return { agentId };
     let appendSystemPrompt: string[] | undefined;
     let mcpServers: AgentSessionConfig["mcpServers"];
     let mcpServerOwners: Record<string, string> | undefined;
@@ -6656,12 +6704,12 @@ export class AgentManager {
         agentId,
         provider: client.provider,
         cwd,
-        workspaceId: opening?.workspaceId ?? null,
-        reason: opening?.reason ?? "resume",
-        purpose: opening?.purpose ?? "interactive",
+        workspaceId: opening.workspaceId ?? null,
+        reason: opening.reason,
+        purpose: opening.purpose,
         env: { ...env },
-        title: opening?.title ?? null,
-        background: opening?.background === true,
+        title: opening.title ?? null,
+        background: opening.background === true,
         ...agentEntityData(opening),
         tools: [],
         mcpServers: {},

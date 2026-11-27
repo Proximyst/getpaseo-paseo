@@ -1,4 +1,5 @@
 import type { ForgeService, PullRequestCheckoutTarget } from "../services/forge-service.js";
+import { listGitHubFetchRemotes } from "../utils/git-fetch-remotes.js";
 import type { WorktreeCheckoutRef, WorktreeSource } from "../utils/worktree.js";
 import type { UntrustedWorkspaceSource } from "./workspace-automation-gate.js";
 
@@ -116,6 +117,7 @@ export async function resolveWorktreeCreationIntent(
       return resolvePrCheckoutIntent({
         refName: input.refName,
         changeRequestNumber: changeRequest.number,
+        projectPath: changeRequest.projectPath,
         repoRoot,
         deps,
       });
@@ -138,6 +140,7 @@ export async function resolveWorktreeCreationIntent(
     return resolvePrCheckoutIntent({
       refName: input.refName,
       changeRequestNumber: changeRequest.number,
+      projectPath: changeRequest.projectPath,
       repoRoot,
       deps,
     });
@@ -168,7 +171,7 @@ export async function resolveWorktreeCreationIntent(
  */
 async function fetchChangeRequestHead(params: {
   input: ResolveWorktreeCreationIntentInput;
-  changeRequest: { number: number; forge?: string };
+  changeRequest: { number: number; forge?: string; projectPath?: string };
   repoRoot: string;
   deps: ResolveWorktreeCreationIntentDeps;
 }): Promise<{
@@ -181,6 +184,7 @@ async function fetchChangeRequestHead(params: {
   const checkout = await resolvePrCheckoutIntent({
     refName: input.refName,
     changeRequestNumber: changeRequest.number,
+    projectPath: changeRequest.projectPath,
     repoRoot,
     deps,
   });
@@ -210,6 +214,7 @@ async function fetchChangeRequestHead(params: {
 interface PrCheckoutIntentParams {
   refName?: string;
   changeRequestNumber: number;
+  projectPath?: string;
   repoRoot: string;
   deps: ResolveWorktreeCreationIntentDeps;
 }
@@ -221,7 +226,7 @@ function resolveInputChangeRequest(
     return {
       number: input.checkoutSource.number,
       ...(input.checkoutSource.forge ? { forge: input.checkoutSource.forge } : {}),
-      ...(input.checkoutSource.projectPath
+      ...(input.checkoutSource.projectPath !== undefined
         ? { projectPath: input.checkoutSource.projectPath }
         : {}),
     };
@@ -251,7 +256,7 @@ async function resolvePrCheckoutIntent(params: PrCheckoutIntentParams): Promise<
 > {
   const { deps } = params;
   const service = deps.forgeService;
-  const checkoutTarget = await resolvePrCheckoutTarget(params);
+  const { checkoutTarget, baseRemote } = await resolvePrCheckoutTarget(params);
   const headRef = await resolvePrHeadRef({
     refName: params.refName,
     changeRequestNumber: params.changeRequestNumber,
@@ -275,7 +280,9 @@ async function resolvePrCheckoutIntent(params: PrCheckoutIntentParams): Promise<
   const localBranchName = service.buildPrLocalBranchName?.({ headRef, checkoutTarget });
   const crossRepository = resolveCrossRepositoryFields(checkoutTarget);
   const trackOriginHead =
-    !checkoutTarget.isCrossRepository && checkoutTarget.headRefKind !== "pull-ref";
+    (!baseRemote || baseRemote === "origin") &&
+    !checkoutTarget.isCrossRepository &&
+    checkoutTarget.headRefKind !== "pull-ref";
 
   return {
     kind: "checkout-change-request",
@@ -284,7 +291,9 @@ async function resolvePrCheckoutIntent(params: PrCheckoutIntentParams): Promise<
     headRef,
     ...crossRepository,
     baseRefName,
-    checkoutRefs: checkoutTarget.checkoutRefs ?? defaultRefs,
+    checkoutRefs: baseRemote
+      ? [{ remoteName: baseRemote, remoteRef: `refs/pull/${params.changeRequestNumber}/head` }]
+      : (checkoutTarget.checkoutRefs ?? defaultRefs),
     ...(localBranchName && localBranchName !== headRef ? { localBranchName } : {}),
     ...(trackOriginHead ? { trackOriginHead } : {}),
   };
@@ -322,15 +331,33 @@ function hasCheckoutRefs(target: PullRequestCheckoutTarget): boolean {
   return Array.isArray(target.checkoutRefs) && target.checkoutRefs.length > 0;
 }
 
-async function resolvePrCheckoutTarget(params: {
-  changeRequestNumber: number;
-  repoRoot: string;
-  deps: ResolveWorktreeCreationIntentDeps;
-}): Promise<PullRequestCheckoutTarget> {
-  return params.deps.forgeService.getPullRequestCheckoutTarget({
-    cwd: params.repoRoot,
-    number: params.changeRequestNumber,
+async function resolvePrCheckoutTarget(
+  params: PrCheckoutIntentParams,
+): Promise<{ checkoutTarget: PullRequestCheckoutTarget; baseRemote?: string }> {
+  const { deps, repoRoot, changeRequestNumber } = params;
+  const repository = deps.forge === "github" ? params.projectPath?.trim().toLowerCase() : undefined;
+  let baseRemote: string | undefined;
+  if (repository !== undefined) {
+    if (!/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/.test(repository)) {
+      throw new Error("GitHub checkout requires a repository in owner/name form");
+    }
+    const candidates = (await listGitHubFetchRemotes(repoRoot)).filter(
+      (remote) => remote.repository === repository,
+    );
+    baseRemote = (candidates.find((remote) => remote.name === "origin") ?? candidates[0])?.name;
+    if (!baseRemote) {
+      throw new Error(`Selected checkout has no GitHub remote for ${repository}`);
+    }
+  }
+  const checkoutTarget = await deps.forgeService.getPullRequestCheckoutTarget({
+    cwd: repoRoot,
+    number: changeRequestNumber,
+    ...(repository ? { repository } : {}),
   });
+  if (repository && checkoutTarget.number !== changeRequestNumber) {
+    throw new Error(`Unable to resolve GitHub PR ${repository}#${changeRequestNumber}`);
+  }
+  return { checkoutTarget, baseRemote };
 }
 
 async function resolveDefaultBranch(

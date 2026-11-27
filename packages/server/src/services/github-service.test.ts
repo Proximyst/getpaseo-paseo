@@ -528,6 +528,264 @@ describe("ForgeService", () => {
     vi.useFakeTimers();
   });
 
+  it("searches across GitHub.com in one request with a raw query and an opaque cursor", async () => {
+    const pullRequest = {
+      __typename: "PullRequest",
+      number: 42,
+      title: "Ship",
+      url: "https://github.com/acme/api/pull/42",
+      updatedAt: "2026-11-19T00:00:00Z",
+      state: "OPEN",
+      isDraft: false,
+      headRefOid: "new",
+      baseRefOid: "base",
+      baseRefName: "main",
+      headRefName: "ship",
+      body: "A summary for the inbox row",
+      additions: 12,
+      deletions: 0,
+      reviewDecision: "CHANGES_REQUESTED",
+      mergeStateStatus: "BLOCKED",
+      totalCommentsCount: 52,
+      repository: { nameWithOwner: "acme/api" },
+      author: { login: "author" },
+      latestOpinionatedReviews: {
+        pageInfo: { hasNextPage: true },
+        nodes: [{ state: "APPROVED" }],
+      },
+      reviewThreads: {
+        pageInfo: { hasNextPage: false },
+        nodes: [{ isResolved: true }, { isResolved: false }],
+      },
+      statusCheckRollup: {
+        contexts: {
+          totalCount: 5,
+          checkRunCountsByState: [
+            { state: "SUCCESS", count: 1 },
+            { state: "FAILURE", count: 1 },
+            { state: "SKIPPED", count: 1 },
+          ],
+          statusContextCountsByState: [{ state: "PENDING", count: 2 }],
+        },
+      },
+    };
+    const stdout = JSON.stringify({
+      errors: [
+        {
+          type: "FORBIDDEN",
+          message: "Resource not accessible by personal access token",
+          path: ["search", "nodes", 2, "statusCheckRollup"],
+        },
+      ],
+      data: {
+        search: {
+          pageInfo: { hasNextPage: true, endCursor: "next/+==" },
+          nodes: [
+            pullRequest,
+            { __typename: "Issue" },
+            {
+              ...pullRequest,
+              url: "https://github.com/another/web/pull/42",
+              repository: { nameWithOwner: "another/web" },
+              additions: undefined,
+              deletions: null,
+              latestOpinionatedReviews: {
+                pageInfo: { hasNextPage: false },
+                nodes: [{ state: "APPROVED" }, { state: "CHANGES_REQUESTED" }],
+              },
+              reviewThreads: { ...pullRequest.reviewThreads, pageInfo: { hasNextPage: true } },
+              statusCheckRollup: null,
+            },
+          ],
+        },
+      },
+    });
+    const runner = createScriptedRunner([
+      {
+        error: new GitHubCommandError({
+          args: ["api", "graphql"],
+          cwd: "/tmp",
+          exitCode: 1,
+          stderr: "gh: Resource not accessible by personal access token",
+          stdout,
+        }),
+      },
+    ]);
+    const resolveRepoHost = vi.fn().mockResolvedValue("enterprise.example");
+    const service = createGitHubService({
+      runner: runner.runner,
+      resolveGhPath: async () => "/usr/bin/gh",
+      resolveRepoHost,
+    });
+    const query = 'author:@me OR (review-requested:@me label:"needs review")';
+
+    const result = await service.searchInboxPullRequests({ query, cursor: "opaque/+==" });
+
+    expect(resolveRepoHost).not.toHaveBeenCalled();
+    expect(runner.calls).toHaveLength(1);
+    expect(runner.calls[0].envOverlay).toMatchObject({ GH_HOST: "github.com" });
+    expect(runner.calls[0].args).toEqual([
+      "api",
+      "--hostname",
+      "github.com",
+      "graphql",
+      "-f",
+      expect.stringContaining("query Inbox("),
+      "-f",
+      `search=is:pr AND (${query})`,
+      "-f",
+      "cursor=opaque/+==",
+    ]);
+    expect(runner.calls[0].args[5]).toContain("additions deletions");
+    expect(result.nextCursor).toBe("next/+==");
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        number: 42,
+        repository: "acme/api",
+        baseSha: "base",
+        headSha: "new",
+        body: "A summary for the inbox row",
+        additions: 12,
+        deletions: 0,
+        reviewDecision: "CHANGES_REQUESTED",
+        checks: { passed: 1, failed: 1, pending: 2, other: 1 },
+        approvals: null,
+        unresolvedThreads: 1,
+        comments: 52,
+      }),
+      expect.objectContaining({
+        number: 42,
+        repository: "another/web",
+        approvals: 1,
+        unresolvedThreads: null,
+        checks: null,
+      }),
+    ]);
+    expect(result.items[1]).not.toHaveProperty("additions");
+    expect(result.items[1]).not.toHaveProperty("deletions");
+  });
+
+  it.each([false, true])("pins changed files (head changed: %s)", async (headChanged) => {
+    const revision = { headRefOid: "head", baseRefOid: "base", changedFiles: 1 };
+    const empty = { pageInfo: { hasPreviousPage: false }, nodes: [] };
+    const runner = createRunner([
+      JSON.stringify({
+        data: {
+          repository: {
+            pullRequest: {
+              ...revision,
+              number: 12,
+              title: "Rename old.txt",
+              url: "https://github.com/acme/api/pull/12",
+              updatedAt: "2026-11-19T18:00:00Z",
+              state: "OPEN",
+              isDraft: false,
+              baseRefName: "main",
+              headRefName: "rename",
+              body: "Renames the file.",
+              additions: 1,
+              deletions: 1,
+              reviewDecision: null,
+              mergeStateStatus: null,
+              totalCommentsCount: 0,
+              repository: { nameWithOwner: "acme/api" },
+              author: { login: "contributor" },
+              latestOpinionatedReviews: { pageInfo: { hasNextPage: false }, nodes: [] },
+              summaryThreads: { pageInfo: { hasNextPage: false }, nodes: [] },
+              comments: empty,
+              reviews: empty,
+              reviewThreads: empty,
+              statusCheckRollup: {
+                contexts: {
+                  totalCount: 2,
+                  checkRunCountsByState: [{ state: "IN_PROGRESS", count: 1 }],
+                  statusContextCountsByState: [{ state: "SUCCESS", count: 1 }],
+                  pageInfo: { hasNextPage: false },
+                  nodes: [
+                    {
+                      __typename: "StatusContext",
+                      id: "status-node",
+                      context: "Policy Bot",
+                      state: "SUCCESS",
+                      targetUrl: "javascript:alert(1)",
+                    },
+                    {
+                      __typename: "CheckRun",
+                      id: "check-node",
+                      name: "Policy Bot",
+                      conclusion: null,
+                      status: "IN_PROGRESS",
+                      detailsUrl: null,
+                      url: "https://github.com/acme/api/runs/123",
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      }),
+      JSON.stringify([
+        {
+          filename: "new.txt",
+          previous_filename: "old.txt",
+          status: "renamed",
+          additions: 1,
+          deletions: 1,
+          patch: "@@ -1 +1 @@\n-old\n+new",
+        },
+      ]),
+      JSON.stringify({
+        data: {
+          repository: {
+            pullRequest: { ...revision, headRefOid: headChanged ? "changed" : "head" },
+          },
+        },
+      }),
+    ]);
+    const service = createGitHubService({
+      runner: runner.runner,
+      resolveGhPath: async () => "/usr/bin/gh",
+    });
+    const detail = service.getInboxPullRequest({ repository: "acme/api", number: 12 });
+
+    if (headChanged) {
+      await expect(detail).rejects.toThrow("The pull request revision changed");
+    } else {
+      await expect(detail).resolves.toMatchObject({
+        pullRequest: {
+          number: 12,
+          title: "Rename old.txt",
+          repository: "acme/api",
+          body: "Renames the file.",
+          additions: 1,
+          deletions: 1,
+          checks: { passed: 1, failed: 0, pending: 1, other: 0 },
+        },
+        headSha: "head",
+        baseSha: "base",
+        complete: true,
+        checks: [
+          { id: "status-node", name: "Policy Bot", state: "SUCCESS", url: null },
+          {
+            id: "check-node",
+            name: "Policy Bot",
+            state: "IN_PROGRESS",
+            url: "https://github.com/acme/api/runs/123",
+          },
+        ],
+        files: [{ path: "new.txt", previousPath: "old.txt", status: "renamed" }],
+      });
+    }
+    expect(runner.calls).toHaveLength(3);
+    expect(runner.calls[1].args).toEqual([
+      "api",
+      "--hostname",
+      "github.com",
+      "repos/acme/api/pulls/12/files?per_page=100",
+    ]);
+  });
+
   describe("getReferenceRepository", () => {
     const forkView = JSON.stringify({
       owner: { login: "fork-owner" },
@@ -832,6 +1090,26 @@ describe("ForgeService", () => {
     expect(computeGithubNextInterval(stableStatus, 2)).toBe(240_000);
     expect(computeGithubNextInterval(stableStatus, 3)).toBe(EXPECTED_GITHUB_ERROR_BACKOFF_CAP_MS);
     expect(computeGithubNextInterval(stableStatus, 4)).toBe(EXPECTED_GITHUB_ERROR_BACKOFF_CAP_MS);
+  });
+
+  it("loads an explicit checkout target from GitHub.com rather than the current repo's host", async () => {
+    const runner = createRunner([pullRequestCheckoutTargetJson()]);
+    const resolveRepoHost = vi.fn().mockResolvedValue("enterprise.example");
+    const service = createGitHubService({
+      runner: runner.runner,
+      resolveGhPath: async () => "/usr/bin/gh",
+      resolveRepoHost,
+    });
+
+    await expect(
+      service.getPullRequestCheckoutTarget({ cwd: "/repo", number: 526, repository: "acme/base" }),
+    ).resolves.toMatchObject({ number: 526, isCrossRepository: true });
+    expect(resolveRepoHost).not.toHaveBeenCalled();
+    expect(runner.calls).toHaveLength(1);
+    expect(runner.calls[0].envOverlay?.GH_HOST).toBe("github.com");
+    expect(runner.calls[0].args).toEqual(
+      expect.arrayContaining(["owner=acme", "name=base", "number=526"]),
+    );
   });
 
   it("loads pull request checkout target details through GraphQL", async () => {

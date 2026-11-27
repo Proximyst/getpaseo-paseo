@@ -3,6 +3,7 @@ import {
   parseGitHubRemoteUrl,
   parseGitRemoteLocation,
 } from "@getpaseo/protocol/git-remote";
+import { useAddProjectFlowStore } from "@/stores/add-project-flow-store";
 import type { GithubRepositoryChoice } from "./model";
 
 export function pathBaseName(path: string): string {
@@ -61,6 +62,14 @@ export function parentDirectory(path: string): string | null {
 export function joinDirectoryPath(parent: string, name: string): string {
   const separator = parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
   return `${parent.replace(/[\\/]+$/, "")}${separator}${name}`;
+}
+
+export function getLastCloneParent(hostId: string): string | undefined {
+  return useAddProjectFlowStore.getState().locationsByHost[hostId]?.lastCloneParent;
+}
+
+export function rememberCloneParent(hostId: string, parentPath: string): void {
+  useAddProjectFlowStore.getState().rememberLocation(hostId, parentPath, "clone");
 }
 
 export function buildSuggestedParentDirectories(projectPaths: string[]): string[] {

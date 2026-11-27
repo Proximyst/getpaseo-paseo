@@ -18,6 +18,7 @@ const UntrustedWorkspaceSourceSchema = z.object({
   forge: z.string(),
   number: z.number().int().positive(),
   headRepository: z.string(),
+  review: z.literal(true).optional(),
 });
 
 const PersistedProjectRecordSchema = z.object({

@@ -1,8 +1,11 @@
 import {
   keepPreviousData,
   skipToken,
+  useInfiniteQuery,
   useQueries,
   useQuery,
+  type InfiniteData,
+  type UseInfiniteQueryOptions,
   type QueryKey,
   type QueryClient,
   type UseQueryOptions,
@@ -58,6 +61,25 @@ export function useFetchQuery<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> {
   return useQuery(fetchQueryOptions(input), queryClient);
+}
+
+/** Cursor chains belong to their query key; never carry placeholders across keys. */
+export function useFetchInfiniteQuery<TPage, TPageParam>(
+  input: Omit<
+    UseInfiniteQueryOptions<TPage, Error, InfiniteData<TPage, TPageParam>, QueryKey, TPageParam>,
+    "initialData" | "placeholderData" | "staleTime"
+  > & { staleTimeMs: number },
+) {
+  const { staleTimeMs, meta, ...options } = input;
+  if (!Number.isFinite(staleTimeMs)) {
+    throw new Error("Fetch queries must declare a finite staleTimeMs.");
+  }
+  return useInfiniteQuery({
+    ...options,
+    meta: { ...meta, serverDataPolicy: { class: "fetch", dataShape: "list" } },
+    refetchOnMount: options.refetchOnMount ?? "always",
+    staleTime: staleTimeMs,
+  });
 }
 
 export function useFetchQueries<TData>(

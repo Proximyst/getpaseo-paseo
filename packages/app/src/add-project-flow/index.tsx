@@ -127,7 +127,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const failure = addProjectFailure(state);
   const recommendedPaths = useRecommendedProjectPaths(state.hostId);
   const rememberedLocation = useAddProjectFlowStore((store) =>
-    state.hostId ? store.lastLocationByHost[state.hostId] : undefined,
+    state.hostId ? store.locationsByHost[state.hostId]?.lastLocation : undefined,
   );
   const defaultLocation = defaultProjectLocation({
     remembered: rememberedLocation,

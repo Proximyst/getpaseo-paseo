@@ -52,11 +52,25 @@ async function isDirectory(target: string): Promise<boolean> {
 let tmpDir: string;
 let gitRoots: Set<string>;
 let gitBranches: Map<string, string | null>;
+let linkedRepoRoots: Map<string, string>;
 let checkoutFailure: Error | null;
 let restoredMergedChangeRequestUrl: string | null;
 let workspaceRegistry: FileBackedWorkspaceRegistry;
 let projectRegistry: FileBackedProjectRegistry;
 let provisioning: WorkspaceProvisioningService;
+
+function gitRootForDirectory(cwd: string): string | null {
+  let worktreeRoot: string | null = null;
+  for (const root of gitRoots) {
+    if (
+      (cwd === root || cwd.startsWith(`${root}${path.sep}`)) &&
+      root.length > (worktreeRoot?.length ?? -1)
+    ) {
+      worktreeRoot = root;
+    }
+  }
+  return worktreeRoot;
+}
 
 function gitService() {
   return createNoopWorkspaceGitService({
@@ -81,15 +95,7 @@ function gitService() {
     },
     getCheckout: async (cwd: string) => {
       if (checkoutFailure) throw checkoutFailure;
-      let worktreeRoot: string | null = null;
-      for (const root of gitRoots) {
-        if (
-          (cwd === root || cwd.startsWith(`${root}${path.sep}`)) &&
-          root.length > (worktreeRoot?.length ?? -1)
-        ) {
-          worktreeRoot = root;
-        }
-      }
+      const worktreeRoot = gitRootForDirectory(cwd);
       return {
         cwd,
         isGit: worktreeRoot !== null,
@@ -97,7 +103,7 @@ function gitService() {
         remoteUrl: null,
         worktreeRoot,
         isPaseoOwnedWorktree: false,
-        mainRepoRoot: null,
+        mainRepoRoot: worktreeRoot ? (linkedRepoRoots.get(worktreeRoot) ?? null) : null,
       };
     },
   });
@@ -107,6 +113,7 @@ beforeEach(async () => {
   tmpDir = mkdtempSync(path.join(os.tmpdir(), "workspace-provisioning-"));
   gitRoots = new Set();
   gitBranches = new Map();
+  linkedRepoRoots = new Map();
   checkoutFailure = null;
   restoredMergedChangeRequestUrl = null;
   workspaceRegistry = new FileBackedWorkspaceRegistry(
@@ -263,6 +270,56 @@ test("worktree workspace creation records its caller independently of its source
     parentWorkspaceId: parent.workspaceId,
   });
 });
+
+test.each(["main", "linked"] as const)(
+  "a review worktree belongs to its selected %s checkout, but not an unrelated or changed project",
+  async (checkoutKind) => {
+    const repoRoot = path.join(tmpDir, "repo");
+    const otherRoot = path.join(tmpDir, "other");
+    gitRoots.add(repoRoot);
+    gitRoots.add(otherRoot);
+    const sourceCwd = checkoutKind === "linked" ? path.join(repoRoot, "subdir") : repoRoot;
+    if (checkoutKind === "linked") {
+      const mainRoot = path.join(tmpDir, "main");
+      gitRoots.add(mainRoot);
+      linkedRepoRoots.set(repoRoot, mainRoot);
+    }
+    const project = await provisioning.findOrCreateProjectForDirectory(sourceCwd);
+    const other = await provisioning.findOrCreateProjectForDirectory(otherRoot);
+    const worktreeRoot = path.join(tmpDir, "review");
+    const input = {
+      sourceCwd,
+      repoRoot,
+      cwd: worktreeRoot,
+      worktreeRoot,
+      branch: null,
+      baseBranch: "a".repeat(40),
+      title: null,
+      untrustedSource: {
+        kind: "change_request",
+        forge: "github",
+        number: 42,
+        headRepository: "acme/repo",
+        review: true,
+      } as const,
+    };
+
+    await expect(
+      provisioning.createWorkspaceForWorktree({ ...input, projectId: other.projectId }),
+    ).rejects.toThrow("Review checkout does not belong to the selected project");
+    await expect(
+      provisioning.createWorkspaceForWorktree({ ...input, projectId: project.projectId }),
+    ).resolves.toMatchObject({ projectId: project.projectId, cwd: worktreeRoot });
+
+    if (checkoutKind === "linked") {
+      // The registered subdirectory is now a separate Git checkout.
+      gitRoots.add(sourceCwd);
+      await expect(
+        provisioning.createWorkspaceForWorktree({ ...input, projectId: project.projectId }),
+      ).rejects.toThrow("Review checkout does not belong to the selected project");
+    }
+  },
+);
 
 test("workspace creation rejects an unknown caller even with explicit visibility", async () => {
   await expect(

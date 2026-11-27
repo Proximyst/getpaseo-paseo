@@ -17,12 +17,21 @@ import {
   type ProjectRegistry,
   type WorkspaceRegistry,
 } from "../../workspace-registry.js";
-import type { WorkspaceGitService } from "../../workspace-git-service.js";
+import {
+  selectWorktreeCreationRoot,
+  type WorkspaceGitService,
+} from "../../workspace-git-service.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../../worktree-session.js";
 import { deriveProjectKey } from "../../project-key.js";
 import { areEquivalentPaths, createRealpathAwarePathMatcher } from "../../../utils/path.js";
-import type { UntrustedWorkspaceSource } from "../../workspace-automation-gate.js";
-import { readPaseoWorktreeMetadata } from "../../../utils/worktree-metadata.js";
+import {
+  workspaceReviewSource,
+  type UntrustedWorkspaceSource,
+} from "../../workspace-automation-gate.js";
+import {
+  readPaseoWorktreeMetadata,
+  type PaseoWorktreeMetadata,
+} from "../../../utils/worktree-metadata.js";
 
 export interface ResolveOrCreateWorkspaceIdInput {
   createdWorktree: CreatePaseoWorktreeWorkflowResult | null;
@@ -269,16 +278,13 @@ export function createWorkspaceProvisioningService(deps: {
       ? await refreshProjectKind(await requireActiveProject(projectId), normalizedCwd, checkout)
       : // COMPAT(workspaceCreateMissingProjectId): added in v0.1.107, remove after 2027-01-15.
         await findOrCreateProjectForDirectory(normalizedCwd);
+    const checkoutRoot = checkout.worktreeRoot ?? normalizedCwd;
     const create = async () => {
       const baseMetadata =
         checkout.isGit && checkout.isPaseoOwnedWorktree
-          ? await readPaseoWorktreeMetadata(checkout.worktreeRoot ?? normalizedCwd)
-          : null;
-      const checkoutRoot = checkout.worktreeRoot ?? normalizedCwd;
-      const { untrustedSource: inheritedUntrustedSource } = await resolveCheckoutUntrustedSource(
-        checkoutRoot,
-        baseMetadata?.untrustedSource,
-      );
+          ? await readPaseoWorktreeMetadata(checkoutRoot)
+          : undefined;
+      const { untrustedSource } = await resolveCheckoutUntrustedSource(checkoutRoot, baseMetadata);
       const timestamp = new Date().toISOString();
       const workspace = createPersistedWorkspaceRecord({
         workspaceId: context?.workspaceId ?? generateWorkspaceId(),
@@ -288,7 +294,7 @@ export function createWorkspaceProvisioningService(deps: {
         worktreeManagerPluginId: baseMetadata?.worktreeManagerPluginId ?? null,
         title: title?.trim() || null,
         metadata: context?.metadata,
-        ...(inheritedUntrustedSource ? { untrustedSource: inheritedUntrustedSource } : {}),
+        ...(untrustedSource ? { untrustedSource } : {}),
         createdAt: timestamp,
         updatedAt: timestamp,
         ...(await resolveCreationMetadata(context)),
@@ -300,7 +306,7 @@ export function createWorkspaceProvisioningService(deps: {
       return workspace;
     };
     return deps.withCheckoutLock && checkout.isGit && checkout.isPaseoOwnedWorktree
-      ? deps.withCheckoutLock(checkout.worktreeRoot ?? normalizedCwd, create)
+      ? deps.withCheckoutLock(checkoutRoot, create)
       : create();
   }
 
@@ -315,6 +321,7 @@ export function createWorkspaceProvisioningService(deps: {
       sourceCwd,
       projectId: input.projectId,
       repoRoot,
+      review: input.untrustedSource?.review === true,
     });
     const timestamp = new Date().toISOString();
     const workspace = createPersistedWorkspaceRecord({
@@ -344,6 +351,7 @@ export function createWorkspaceProvisioningService(deps: {
   }
 
   function emitWorkspaceCreated(workspace: PersistedWorkspaceRecord): void {
+    if (workspace.untrustedSource?.review) return;
     deps.lifecycle?.emit("workspace.create.after", {
       workspace: describeHookWorkspace(workspace),
     });
@@ -353,9 +361,24 @@ export function createWorkspaceProvisioningService(deps: {
     sourceCwd: string;
     projectId?: string;
     repoRoot: string;
+    review: boolean;
   }): Promise<PersistedProjectRecord> {
     if (input.projectId) {
-      return refreshProjectKind(await requireActiveProject(input.projectId));
+      const project = await requireActiveProject(input.projectId);
+      if (!input.review) return refreshProjectKind(project);
+
+      // Ownership depends on the current checkout, not runtime observation state.
+      const checkout = await workspaceGitService.getCheckout(project.rootPath);
+      if (
+        !checkout.isGit ||
+        !areEquivalentPaths(
+          selectWorktreeCreationRoot(checkout, checkout.worktreeRoot ?? project.rootPath),
+          input.repoRoot,
+        )
+      ) {
+        throw new Error("Review checkout does not belong to the selected project");
+      }
+      return refreshProjectKind(project, project.rootPath, checkout);
     }
 
     const workspaces = await workspaceRegistry.listActive();
@@ -429,11 +452,15 @@ export function createWorkspaceProvisioningService(deps: {
 
   async function resolveCheckoutUntrustedSource(
     checkoutRoot: string,
-    knownMetadataUntrustedSource?: UntrustedWorkspaceSource,
+    knownMetadata?: PaseoWorktreeMetadata | null,
   ): Promise<{ hasEvidence: boolean; untrustedSource: UntrustedWorkspaceSource | undefined }> {
+    const metadata =
+      knownMetadata === undefined
+        ? await readPaseoWorktreeMetadata(checkoutRoot).catch(() => null)
+        : knownMetadata;
     const metadataUntrustedSource =
-      knownMetadataUntrustedSource ??
-      (await readPaseoWorktreeMetadata(checkoutRoot).catch(() => null))?.untrustedSource;
+      workspaceReviewSource(metadata?.version === 2 ? metadata.review : undefined) ??
+      metadata?.untrustedSource;
     if (metadataUntrustedSource) {
       return { hasEvidence: true, untrustedSource: metadataUntrustedSource };
     }

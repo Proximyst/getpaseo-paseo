@@ -1326,6 +1326,28 @@ export const ja: TranslationResources = {
       sessions: "履歴",
       search: "検索",
       schedules: "スケジュール",
+      githubPullRequests: "GitHub の PR",
+    },
+    pullRequestInbox: {
+      checkout: "PR をチェックアウト",
+      mine: "自分の PR",
+      reviewRequested: "レビュー依頼",
+      open: "PR を開く",
+      reference: "GitHub PR の URL または参照",
+      invalidReference:
+        "GitHub の PR の URL、または owner/repo#123 のような参照を入力してください。",
+      updateHostToOpen: "URL または参照で PR を開くには、このホストの Paseo を更新してください。",
+      searchQuery: "GitHub 検索クエリ",
+      options: "PR 受信トレイのオプション",
+      projectsOnly: "プロジェクトのみ",
+      cloneDirectory: "既定のクローン先ディレクトリ",
+      cloneDirectoryHint:
+        "このホスト上のディレクトリを指定すると、未登録のプロジェクトが owner/repo のサブフォルダーにクローンされます。空欄にすると自動クローンが無効になります。",
+      preferencesError: "受信トレイの設定を読み込めませんでした。",
+      matchingProjects: "PR に対応するプロジェクトを検索しています…",
+      projectMatchError: "PR に対応するプロジェクトを確認できませんでした: {{message}}",
+      noProjectPullRequests: "このビューに一致するプロジェクトの PR はありません。",
+      noProjectPullRequestsOnLoadedPages: "読み込み済みのページにプロジェクトの PR はありません。",
     },
     worktreeSetup: {
       title: "ワークツリースクリプトを設定",

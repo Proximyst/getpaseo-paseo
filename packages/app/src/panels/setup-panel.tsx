@@ -337,6 +337,20 @@ function SetupPanelBody(props: SetupPanelBodyProps) {
   const { t } = useTranslation();
   const { snapshot, commands } = props;
   if (snapshot?.status === "blocked" && snapshot.blockedSource) {
+    if (snapshot.blockedSource.review) {
+      return (
+        <Alert
+          size="sm"
+          variant="warning"
+          title={t("workspace.setup.descriptor.blocked")}
+          description={t("workspace.setup.blocked.reviewDescription", {
+            defaultValue:
+              "Repository setup and scripts are disabled in pull request review worktrees.",
+          })}
+          testID="workspace-setup-blocked"
+        />
+      );
+    }
     return (
       <BlockedSetupNotice
         serverId={props.serverId}

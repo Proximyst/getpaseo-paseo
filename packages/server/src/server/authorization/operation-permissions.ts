@@ -100,6 +100,9 @@ const INBOUND_PERMISSION = {
   "file.upload.request": "workspace.write",
   file_download_token_request: "workspace.read",
   file_explorer_request: "workspace.read",
+  // These global reads expose everything visible to the daemon's GitHub account.
+  "forge.github.get_pull_request.request": "access.manage",
+  "forge.github.search_pull_requests.request": "access.manage",
   "forge.search.request": "workspace.read",
   "fs.entry.create.request": "workspace.write",
   "fs.entry.delete.request": "workspace.write",
@@ -356,6 +359,8 @@ const OUTBOUND_PERMISSION = {
   "file.upload.response": "workspace.write",
   file_download_token_response: "workspace.read",
   file_explorer_response: "workspace.read",
+  "forge.github.get_pull_request.response": "access.manage",
+  "forge.github.search_pull_requests.response": "access.manage",
   "forge.search.response": "workspace.read",
   "fs.entry.create.response": "workspace.write",
   "fs.entry.delete.response": "workspace.write",

@@ -538,6 +538,17 @@ const ToolPolicySchema = z
 const AgentSessionConfigSchema = z.object({
   provider: AgentProviderSchema,
   cwd: z.string(),
+  launchProfile: z.literal("pull-request-review").optional(),
+  reviewHeadSha: z
+    .string()
+    .length(40)
+    .regex(/^[0-9a-f]{40}$/i)
+    .optional(),
+  reviewBaseSha: z
+    .string()
+    .length(40)
+    .regex(/^[0-9a-f]{40}$/i)
+    .optional(),
   modeId: z.string().optional(),
   model: z.string().optional(),
   thinkingOptionId: z.string().optional(),
@@ -1349,6 +1360,14 @@ export const ChangeRequestCheckoutSourceSchema = z.object({
   forge: z.string().optional(),
   number: z.number().int().positive(),
   projectPath: z.string().optional(),
+  expectedHeadSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/i)
+    .optional(),
+  expectedBaseSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/i)
+    .optional(),
 });
 
 const ImageAttachmentSchema = z.object({
@@ -2538,6 +2557,7 @@ export type DiffSubscribeResponse = z.infer<typeof DiffSubscribeResponseSchema>;
 export const CheckoutStatusRequestSchema = z.object({
   type: z.literal("checkout_status_request"),
   cwd: z.string(),
+  includeGithubRepositories: z.boolean().optional(),
   requestId: z.string(),
 });
 
@@ -2830,6 +2850,22 @@ export const ForgeSearchRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const GithubPullRequestInboxSearchRequestSchema = z.object({
+  type: z.literal("forge.github.search_pull_requests.request"),
+  query: z.string().trim().min(1).max(4096),
+  cursor: z.string().min(1).max(2048).optional(),
+  requestId: z.string(),
+});
+
+export const GithubPullRequestInboxDetailRequestSchema = z.object({
+  type: z.literal("forge.github.get_pull_request.request"),
+  repository: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.{1,2}$)[A-Za-z0-9_.-]{1,100}$/),
+  number: z.number().int().min(1).max(2_147_483_647),
+  requestId: z.string(),
+});
+
 // COMPAT(githubSearchRpc): legacy RPC retained when forge.search.* shipped in
 // v0.2.0-beta.1. Stop serving and consuming it after 2027-01-17 once client
 // and daemon floors are >= v0.2.0.
@@ -2898,7 +2934,7 @@ export const CreatePaseoWorktreeRequestSchema = z.object({
   attachments: AgentAttachmentsSchema.optional(),
   firstAgentContext: FirstAgentContextSchema.optional(),
   refName: z.string().min(1).optional(),
-  action: z.enum(["branch-off", "checkout"]).optional(),
+  action: z.enum(["branch-off", "checkout", "review"]).optional(),
   checkoutSource: ChangeRequestCheckoutSourceSchema.optional(),
   // COMPAT(githubPrNumber): legacy GitHub checkout input retained when
   // checkoutSource shipped in v0.2.0-beta.1. Remove after 2027-01-17 once the
@@ -2987,6 +3023,7 @@ export const ProjectGithubCloneRequestSchema = z.object({
   repo: z.string().trim().min(MIN_REPOSITORY_PATH_LENGTH),
   cloneProtocol: ProjectGithubCloneProtocolSchema.optional(),
   targetDirectory: z.string().trim().min(1),
+  reuseMatchingCheckout: z.boolean().optional(),
   requestId: z.string(),
 });
 
@@ -3741,6 +3778,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ValidateBranchRequestSchema,
   BranchSuggestionsRequestSchema,
   ForgeSearchRequestSchema,
+  GithubPullRequestInboxSearchRequestSchema,
+  GithubPullRequestInboxDetailRequestSchema,
   GitHubSearchRequestSchema,
   DirectorySuggestionsRequestSchema,
   PaseoWorktreeListRequestSchema,
@@ -4053,6 +4092,9 @@ export const ServerInfoStatusPayloadSchema = z
         // and github_search fallback after 2027-01-17 once the supported daemon
         // floor is >= v0.2.0.
         forgeSearch: z.boolean().optional(),
+        githubPullRequestInbox: z.boolean().optional(),
+        githubPullRequestInboxOpen: z.boolean().optional(),
+        githubPullRequestInboxAutoClone: z.boolean().optional(),
         // COMPAT(daemonStatusRpc): added in v0.1.76, remove gate after 2026-11-18.
         daemonStatusRpc: z.boolean().optional(),
         tailscale: z.boolean().optional(),
@@ -4930,6 +4972,7 @@ export const WorkspaceSetupProgressMessageSchema = z.object({
         forge: z.string(),
         number: z.number().int().positive(),
         headRepository: z.string(),
+        review: z.literal(true).optional(),
       })
       .optional(),
   }),
@@ -4945,6 +4988,7 @@ export const WorkspaceSetupSnapshotSchema = z.object({
       forge: z.string(),
       number: z.number().int().positive(),
       headRepository: z.string(),
+      review: z.literal(true).optional(),
     })
     .optional(),
 });
@@ -5882,6 +5926,7 @@ const CheckoutStatusCommonSchema = z.object({
   // daemons that predate it.
   firstPushRemote: z.string().nullable().optional(),
   forgeWeb: ForgeWebSchema.optional(),
+  githubRepositories: z.array(z.string()).optional(),
 });
 
 const CheckoutStatusNotGitSchema = CheckoutStatusCommonSchema.extend({
@@ -6600,6 +6645,90 @@ const GitHubSearchResponsePayloadSchema = z.object({
 export const ForgeSearchResponseSchema = z.object({
   type: z.literal("forge.search.response"),
   payload: ForgeSearchResponsePayloadSchema,
+});
+
+const GithubInboxCountSchema = z.number().int().nonnegative();
+
+export const GithubInboxPullRequestSchema = z.object({
+  number: z.number().int().positive(),
+  title: z.string(),
+  url: z.string(),
+  repository: z.string(),
+  author: z.string().nullable(),
+  updatedAt: z.string(),
+  state: z.enum(["OPEN", "CLOSED", "MERGED"]),
+  isDraft: z.boolean(),
+  headSha: z.string(),
+  baseSha: z.string(),
+  baseRef: z.string(),
+  headRef: z.string(),
+  body: z.string().optional(),
+  additions: GithubInboxCountSchema.optional(),
+  deletions: GithubInboxCountSchema.optional(),
+  reviewDecision: z.enum(["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"]).nullable(),
+  mergeStateStatus: z.string().nullable(),
+  checks: z
+    .object({
+      passed: GithubInboxCountSchema,
+      failed: GithubInboxCountSchema,
+      pending: GithubInboxCountSchema,
+      other: GithubInboxCountSchema,
+    })
+    .nullable(),
+  approvals: GithubInboxCountSchema.nullable(),
+  comments: GithubInboxCountSchema.nullable(),
+  unresolvedThreads: GithubInboxCountSchema.nullable(),
+});
+
+export const GithubPullRequestInboxSearchResponseSchema = z.object({
+  type: z.literal("forge.github.search_pull_requests.response"),
+  payload: z.object({
+    items: z.array(GithubInboxPullRequestSchema),
+    nextCursor: z.string().nullable(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
+export const GithubInboxPullRequestActivitySchema = z.object({
+  id: z.string(),
+  kind: z.enum(["comment", "review"]),
+  author: z.string().nullable(),
+  authorId: z.string().nullable(),
+  body: z.string(),
+  url: z.string(),
+  createdAt: z.string(),
+  headSha: z.string().nullable(),
+  path: z.string().nullable(),
+  line: z.number().int().nullable(),
+  resolved: z.boolean().nullable(),
+  outdated: z.boolean().nullable(),
+});
+
+export const GithubInboxPullRequestFileSchema = z.object({
+  path: z.string(),
+  previousPath: z.string().nullable(),
+  status: z.string(),
+  additions: GithubInboxCountSchema,
+  deletions: GithubInboxCountSchema,
+  patch: z.string().nullable(),
+});
+
+export const GithubPullRequestInboxDetailResponseSchema = z.object({
+  type: z.literal("forge.github.get_pull_request.response"),
+  payload: z.object({
+    pullRequest: GithubInboxPullRequestSchema.optional(),
+    headSha: z.string().nullable(),
+    baseSha: z.string().nullable(),
+    activity: z.array(GithubInboxPullRequestActivitySchema),
+    files: z.array(GithubInboxPullRequestFileSchema),
+    checks: z.array(
+      z.object({ id: z.string(), name: z.string(), state: z.string(), url: z.string().nullable() }),
+    ),
+    complete: z.boolean(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
 });
 
 // COMPAT(githubSearchRpc): legacy RPC retained when forge.search.* shipped in
@@ -7909,6 +8038,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ValidateBranchResponseSchema,
   BranchSuggestionsResponseSchema,
   ForgeSearchResponseSchema,
+  GithubPullRequestInboxSearchResponseSchema,
+  GithubPullRequestInboxDetailResponseSchema,
   GitHubSearchResponseSchema,
   DirectorySuggestionsResponseSchema,
   PaseoWorktreeListResponseSchema,
@@ -8375,6 +8506,21 @@ export type ForgeSearchItem = z.infer<typeof ForgeSearchItemSchema>;
 export type ForgeSearchKind = "issue" | "change_request";
 export type ForgeSearchRequest = z.infer<typeof ForgeSearchRequestSchema>;
 export type ForgeSearchResponse = z.infer<typeof ForgeSearchResponseSchema>;
+export type GithubInboxPullRequest = z.infer<typeof GithubInboxPullRequestSchema>;
+export type GithubInboxPullRequestActivity = z.infer<typeof GithubInboxPullRequestActivitySchema>;
+export type GithubInboxPullRequestFile = z.infer<typeof GithubInboxPullRequestFileSchema>;
+export type GithubPullRequestInboxSearchRequest = z.infer<
+  typeof GithubPullRequestInboxSearchRequestSchema
+>;
+export type GithubPullRequestInboxSearchResponse = z.infer<
+  typeof GithubPullRequestInboxSearchResponseSchema
+>;
+export type GithubPullRequestInboxDetailRequest = z.infer<
+  typeof GithubPullRequestInboxDetailRequestSchema
+>;
+export type GithubPullRequestInboxDetailResponse = z.infer<
+  typeof GithubPullRequestInboxDetailResponseSchema
+>;
 export type GitHubSearchItem = z.infer<typeof GitHubSearchItemSchema>;
 export type GitHubSearchKind = z.infer<typeof GitHubSearchKindSchema>;
 export type GitHubSearchRequest = z.infer<typeof GitHubSearchRequestSchema>;

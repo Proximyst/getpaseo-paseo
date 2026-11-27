@@ -5,6 +5,11 @@ import type {
 import type { PluginLifecycle } from "./plugins/lifecycle/index.js";
 import type { PluginWorktreeManagerRuntime } from "./plugins/runtime.js";
 import { createNameId } from "mnemonic-id";
+import { randomUUID } from "node:crypto";
+import {
+  setPaseoWorktreeUntrustedSource,
+  type WorktreeReview,
+} from "../utils/worktree-metadata.js";
 
 import type { ForgeService } from "../services/forge-service.js";
 import {
@@ -27,9 +32,9 @@ import {
 } from "./resolve-worktree-creation-intent.js";
 import type { ChangeRequestCheckoutSource, FirstAgentContext } from "@getpaseo/protocol/messages";
 import type { WorkspaceGitService } from "./workspace-git-service.js";
+import { listGitHubFetchRemotes } from "../utils/git-fetch-remotes.js";
 import { runWithRepositoryRoot } from "../utils/git-repository-discovery.js";
 import { runGitCommand, runWithGitCommandPriority } from "../utils/run-git-command.js";
-import { setPaseoWorktreeUntrustedSource } from "../utils/worktree-metadata.js";
 
 import type { UntrustedWorkspaceSource } from "./workspace-automation-gate.js";
 
@@ -38,7 +43,7 @@ export interface CreateWorktreeCoreInput {
   worktreeSlug?: string;
   branchName?: string;
   refName?: string;
-  action?: "branch-off" | "checkout";
+  action?: "branch-off" | "checkout" | "review";
   checkoutSource?: ChangeRequestCheckoutSource;
   githubPrNumber?: number;
   firstAgentContext?: FirstAgentContext;
@@ -66,23 +71,19 @@ export interface CreateWorktreeCoreResult {
   untrustedSource?: UntrustedWorkspaceSource;
   repoRoot: string;
   created: boolean;
+  review?: WorktreeReview;
 }
 
 export async function createWorktreeCore(
   input: CreateWorktreeCoreInput,
   deps: CreateWorktreeCoreDeps,
 ): Promise<CreateWorktreeCoreResult> {
-  return runWithGitCommandPriority("high", () => createWorktreeCoreWithPriority(input, deps));
-}
-
-async function createWorktreeCoreWithPriority(
-  input: CreateWorktreeCoreInput,
-  deps: CreateWorktreeCoreDeps,
-): Promise<CreateWorktreeCoreResult> {
-  const repoRoot = await resolveWorktreeRepoRoot(input, deps.workspaceGitService);
-  return runWithRepositoryRoot(repoRoot, () =>
-    createWorktreeAtRepositoryRoot(input, deps, repoRoot),
-  );
+  return runWithGitCommandPriority("high", async () => {
+    const repoRoot = await resolveWorktreeRepoRoot(input, deps.workspaceGitService);
+    return runWithRepositoryRoot(repoRoot, () =>
+      createWorktreeAtRepositoryRoot(input, deps, repoRoot),
+    );
+  });
 }
 
 async function createWorktreeAtRepositoryRoot(
@@ -90,42 +91,14 @@ async function createWorktreeAtRepositoryRoot(
   deps: CreateWorktreeCoreDeps,
   repoRoot: string,
 ): Promise<CreateWorktreeCoreResult> {
+  if (input.action === "review") return createReviewWorktree(input, repoRoot, deps.github);
+  if (input.checkoutSource?.expectedHeadSha || input.checkoutSource?.expectedBaseSha) {
+    throw new Error("Expected revisions require the review worktree action");
+  }
   const requestedWorktreeSlug = input.worktreeSlug
     ? normalizeWorktreeSlug(input.worktreeSlug)
     : undefined;
-  const requestedBranchName = input.branchName?.trim();
-
-  let intentInput: ResolveWorktreeCreationIntentInput;
-  if (input.action === "checkout") {
-    intentInput = {
-      action: "checkout",
-      refName: input.refName,
-      checkoutSource: input.checkoutSource,
-      githubPrNumber: input.githubPrNumber,
-      worktreeSlug: requestedWorktreeSlug,
-    };
-  } else if (
-    input.action !== "branch-off" &&
-    (input.checkoutSource !== undefined || input.githubPrNumber !== undefined)
-  ) {
-    // A change request with no action is checked out, as clients did before `action` existed.
-    intentInput = {
-      checkoutSource: input.checkoutSource,
-      githubPrNumber: input.githubPrNumber,
-      refName: input.refName,
-      worktreeSlug: requestedWorktreeSlug,
-    };
-  } else {
-    const worktreeSlug = requestedWorktreeSlug ?? normalizeWorktreeSlug(createNameId());
-    intentInput = {
-      action: "branch-off",
-      refName: input.refName,
-      checkoutSource: input.checkoutSource,
-      githubPrNumber: input.githubPrNumber,
-      branchName: requestedBranchName,
-      worktreeSlug,
-    };
-  }
+  const intentInput = buildWorktreeCreationIntentInput(input, requestedWorktreeSlug);
 
   const forge = await resolveForge(repoRoot, deps, intentInput);
   let intent = await resolveWorktreeCreationIntent(intentInput, repoRoot, {
@@ -209,6 +182,34 @@ async function createWorktreeAtRepositoryRoot(
   };
 }
 
+function buildWorktreeCreationIntentInput(
+  input: CreateWorktreeCoreInput,
+  requestedWorktreeSlug: string | undefined,
+): ResolveWorktreeCreationIntentInput {
+  let action: ResolveWorktreeCreationIntentInput["action"];
+  if (input.action === "checkout") {
+    action = "checkout";
+  } else if (
+    input.action === "branch-off" ||
+    (input.checkoutSource === undefined && input.githubPrNumber === undefined)
+  ) {
+    action = "branch-off";
+  }
+
+  // Leaving the action unset preserves legacy change-request checkout behavior.
+  const branchOff = action === "branch-off";
+  return {
+    action,
+    refName: input.refName,
+    checkoutSource: input.checkoutSource,
+    githubPrNumber: input.githubPrNumber,
+    branchName: branchOff ? input.branchName?.trim() : undefined,
+    worktreeSlug: branchOff
+      ? (requestedWorktreeSlug ?? normalizeWorktreeSlug(createNameId()))
+      : requestedWorktreeSlug,
+  };
+}
+
 async function tryCreateWithWorktreeManager(options: {
   repoRoot: string;
   transformed: PluginWorktreeCreateRequest;
@@ -241,6 +242,117 @@ async function tryCreateWithWorktreeManager(options: {
     },
   });
   return { worktree, preparedBranchOff };
+}
+
+function parseReviewCheckoutSource(input: CreateWorktreeCoreInput): WorktreeReview {
+  const source = input.checkoutSource;
+  const repository = source?.projectPath?.trim().toLowerCase();
+  const headSha = source?.expectedHeadSha?.toLowerCase();
+  const baseSha = source?.expectedBaseSha?.toLowerCase();
+  if (
+    !source ||
+    (source.forge !== undefined && source.forge !== "github") ||
+    !Number.isSafeInteger(source.number) ||
+    source.number <= 0 ||
+    !repository ||
+    !/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/.test(repository) ||
+    !headSha ||
+    !/^[0-9a-f]{40}$/.test(headSha) ||
+    !baseSha ||
+    !/^[0-9a-f]{40}$/.test(baseSha)
+  ) {
+    throw new Error(
+      "Review checkout requires a GitHub repository, PR number, and full head and base SHAs",
+    );
+  }
+  return { repository, number: source.number, headSha, baseSha };
+}
+
+async function createReviewWorktree(
+  input: CreateWorktreeCoreInput,
+  repoRoot: string,
+  github: ForgeService,
+): Promise<CreateWorktreeCoreResult> {
+  const review = parseReviewCheckoutSource(input);
+  const { repository, headSha, baseSha } = review;
+  const remoteName = await findReviewRemoteName(repoRoot, repository);
+  const target = await github.getPullRequestCheckoutTarget({
+    cwd: repoRoot,
+    number: review.number,
+    repository,
+    force: true,
+    reason: "verify pinned review revisions",
+  });
+  if (target.number !== review.number || !target.baseRefName.trim()) {
+    throw new Error(`Unable to resolve GitHub PR ${repository}#${review.number}`);
+  }
+  const revisionChanged = `GitHub PR ${repository}#${review.number} changed; refresh the PR before reviewing`;
+  if (target.headSha?.toLowerCase() !== headSha || target.baseSha?.toLowerCase() !== baseSha) {
+    throw new Error(revisionChanged);
+  }
+  const temporary = `refs/paseo/review-fetch/${randomUUID()}`;
+  const fetchedHead = `${temporary}/head`;
+  const fetchedBase = `${temporary}/base`;
+  try {
+    await runGitCommand(
+      [
+        "fetch",
+        "--atomic",
+        "--no-tags",
+        "--no-recurse-submodules",
+        "--no-write-fetch-head",
+        "--refmap=",
+        "--",
+        remoteName,
+        `refs/pull/${review.number}/head:${fetchedHead}`,
+        `${baseSha}:${fetchedBase}`,
+      ],
+      { cwd: repoRoot, timeout: 120_000 },
+    );
+    const [{ stdout: actualHead }, { stdout: actualBase }] = await Promise.all([
+      runGitCommand(["rev-parse", "--verify", `${fetchedHead}^{commit}`], { cwd: repoRoot }),
+      runGitCommand(["rev-parse", "--verify", `${fetchedBase}^{commit}`], { cwd: repoRoot }),
+    ]);
+    if (actualHead.trim() !== headSha || actualBase.trim() !== baseSha) {
+      throw new Error(revisionChanged);
+    }
+    const worktreeSlug = normalizeWorktreeSlug(input.worktreeSlug ?? `review-pr-${review.number}`);
+    const worktree = await createWorktree({
+      cwd: repoRoot,
+      worktreeSlug,
+      source: { kind: "restore-commit", commit: headSha, baseRef: target.baseRefName, review },
+      paseoHome: input.paseoHome,
+      worktreesRoot: input.worktreesRoot,
+    });
+    return {
+      worktree: { ...worktree, branchName: worktree.branchName ?? "" },
+      intent: {
+        kind: "checkout-change-request",
+        forge: "github",
+        changeRequestNumber: review.number,
+        headRef: target.headRefName,
+        baseRefName: target.baseRefName,
+      },
+      repoRoot,
+      created: true,
+      review,
+    };
+  } finally {
+    await Promise.all(
+      [fetchedHead, fetchedBase].map((ref) =>
+        runGitCommand(["update-ref", "-d", ref], { cwd: repoRoot }).catch(() => {}),
+      ),
+    );
+  }
+}
+
+async function findReviewRemoteName(repoRoot: string, repository: string): Promise<string> {
+  const remote = (await listGitHubFetchRemotes(repoRoot)).find(
+    (candidate) => candidate.repository === repository,
+  );
+  // Fetch by name to avoid applying insteadOf again to the already-rewritten URL.
+  if (remote) return remote.name;
+  throw new Error(`Selected checkout has no GitHub remote for ${repository}`);
 }
 
 function describeCreationRequest(
@@ -311,6 +423,13 @@ async function resolveForge(
   deps: CreateWorktreeCoreDeps,
   intentInput: ResolveWorktreeCreationIntentInput,
 ): Promise<{ forge: string; service: ForgeService }> {
+  if (
+    intentInput.checkoutSource?.forge === "github" &&
+    intentInput.checkoutSource.projectPath !== undefined
+  ) {
+    // Inbox checkout selects a specific github.com remote, not the project's default forge.
+    return { forge: "github", service: deps.github };
+  }
   const resolution = await deps.workspaceGitService?.resolveForge(repoRoot);
   if (!resolution) {
     if (intentInput.checkoutSource?.forge && intentInput.checkoutSource.forge !== "github") {

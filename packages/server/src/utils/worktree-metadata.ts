@@ -19,6 +19,7 @@ const UntrustedWorktreeSourceSchema = z.object({
   forge: z.string().min(1),
   number: z.number().int().positive(),
   headRepository: z.string().min(1),
+  review: z.literal(true).optional(),
 });
 
 // baseRefName is the display name; baseRef is the checkout's current exact base
@@ -33,6 +34,13 @@ const PaseoWorktreeMetadataV1Schema = z.object({
   untrustedSource: UntrustedWorktreeSourceSchema.optional(),
 });
 
+const WorktreeReviewSchema = z.object({
+  repository: z.string().min(1),
+  number: z.number().int().positive(),
+  headSha: z.string().regex(/^[0-9a-f]{40}$/),
+  baseSha: z.string().regex(/^[0-9a-f]{40}$/),
+});
+
 const PaseoWorktreeMetadataV2Schema = z.object({
   version: z.literal(2),
   baseRefName: z.string().min(1),
@@ -40,6 +48,7 @@ const PaseoWorktreeMetadataV2Schema = z.object({
   changeRequestLookupTarget: ChangeRequestLookupTargetSchema.optional(),
   worktreeManagerPluginId: z.string().min(1).optional(),
   untrustedSource: UntrustedWorktreeSourceSchema.optional(),
+  review: WorktreeReviewSchema.optional(),
   firstAgentBranchAutoName: z
     .discriminatedUnion("status", [
       z.object({
@@ -68,6 +77,7 @@ const PaseoWorktreeMetadataSchema = z.union([
 export type PaseoWorktreeMetadata = z.infer<typeof PaseoWorktreeMetadataSchema>;
 export type PaseoWorktreeChangeRequestHint = z.infer<typeof ChangeRequestLookupTargetSchema>;
 export type PaseoWorktreeUntrustedSource = z.infer<typeof UntrustedWorktreeSourceSchema>;
+export type WorktreeReview = z.infer<typeof WorktreeReviewSchema>;
 
 export function createPaseoWorktreeChangeRequestHint(
   input: PaseoWorktreeChangeRequestHint,
@@ -257,6 +267,7 @@ export async function writePaseoWorktreeMetadata(
     changeRequestLookupTarget?: PaseoWorktreeChangeRequestHint;
     worktreeManagerPluginId?: string;
     untrustedSource?: PaseoWorktreeUntrustedSource;
+    review?: WorktreeReview;
   },
 ): Promise<void> {
   return mutateMetadata(worktreeRoot, async (root) => {
@@ -268,9 +279,10 @@ export async function writePaseoWorktreeMetadata(
     }
 
     const metadata: PaseoWorktreeMetadata = {
-      version: 1,
+      version: options.review ? 2 : 1,
       baseRefName,
       ...(baseRef ? { baseRef } : {}),
+      ...(options.review ? { review: options.review } : {}),
       ...(options.changeRequestLookupTarget
         ? { changeRequestLookupTarget: options.changeRequestLookupTarget }
         : {}),

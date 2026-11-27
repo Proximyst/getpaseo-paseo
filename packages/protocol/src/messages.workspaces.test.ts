@@ -482,6 +482,18 @@ describe("workspace message schemas", () => {
     expect(response.payload.project?.projectId).toBe("project-b");
   });
 
+  test("parses opt-in checkout reuse without an explicit clone protocol", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "project.github.clone.request",
+        repo: "owner/repo",
+        targetDirectory: "~/work/owner",
+        reuseMatchingCheckout: true,
+        requestId: "req-reuse",
+      }),
+    ).toMatchObject({ targetDirectory: "~/work/owner", reuseMatchingCheckout: true });
+  });
+
   test("rejects invalid project GitHub clone protocols", () => {
     const request = SessionInboundMessageSchema.safeParse({
       type: "project.github.clone.request",
